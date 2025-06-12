@@ -4,14 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Express Parcel Visualization - Python Flask</title>
-    <!-- 修复：按正确顺序加载所有依赖 -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/redux@4.2.1/dist/redux.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-redux@8.1.2/dist/react-redux.min.js"></script>
-    <script crossorigin src="https://unpkg.com/styled-components@5.3.11/dist/styled-components.min.js"></script>
-    <!-- Kepler.gl 最后加载 -->
-    <script crossorigin src="https://unpkg.com/kepler.gl@3.0.0/umd/keplergl.min.js"></script>
+    
+    <!-- 方案1: 使用jsDelivr CDN作为主要源 -->
+    <script crossorigin src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script crossorigin src="https://cdn.jsdelivr.net/npm/redux@4.2.1/dist/redux.min.js"></script>
+    <script crossorigin src="https://cdn.jsdelivr.net/npm/react-redux@8.1.2/dist/react-redux.min.js"></script>
+    <script crossorigin src="https://cdn.jsdelivr.net/npm/styled-components@5.3.11/dist/styled-components.min.js"></script>
+    
+    <!-- Kepler.gl 使用多个备用源 -->
+    <script crossorigin src="https://cdn.jsdelivr.net/npm/kepler.gl@3.0.0/umd/keplergl.min.js"></script>
     
     <style>
         * {
@@ -264,6 +266,16 @@
             margin-top: 0.5rem;
             border: 1px solid #667eea;
         }
+        
+        .cdn-info {
+            background: rgba(72, 187, 120, 0.1);
+            color: #2f855a;
+            padding: 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            margin-top: 0.5rem;
+            border: 1px solid #48bb78;
+        }
     </style>
 </head>
 <body>
@@ -287,6 +299,9 @@
                     <div class="library-status" id="libraryStatus">
                         📚 Checking library status...
                     </div>
+                    <div class="cdn-info" id="cdnInfo">
+                        🌐 Using jsDelivr CDN for better global access
+                    </div>
                     <div class="debug-info" id="debugInfo">
                         Debug: Waiting for file selection...
                     </div>
@@ -301,6 +316,9 @@
                     </button>
                     <button class="btn btn-secondary" onclick="resetVisualization()" id="resetBtn" disabled>
                         🔄 Reset
+                    </button>
+                    <button class="btn btn-secondary" onclick="tryLoadKeplerManually()" id="retryBtn" style="display: none;">
+                        🔄 Retry Load
                     </button>
                 </div>
             </div>
@@ -327,6 +345,78 @@
         let processedData = null;
         let debugMode = true;
         let librariesLoaded = false;
+        let keplerLoadAttempts = 0;
+        const maxKeplerAttempts = 3;
+
+        // 备用CDN列表
+        const keplerCDNs = [
+            'https://cdn.jsdelivr.net/npm/kepler.gl@3.0.0/umd/keplergl.min.js',
+            'https://unpkg.com/kepler.gl@3.0.0/umd/keplergl.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/kepler.gl/3.0.0/keplergl.min.js'
+        ];
+
+        // 动态加载脚本
+        function loadScript(src) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.crossOrigin = 'anonymous';
+                script.onload = () => resolve(src);
+                script.onerror = () => reject(new Error(`Failed to load ${src}`));
+                document.head.appendChild(script);
+            });
+        }
+
+        // 手动尝试加载Kepler.gl
+        async function tryLoadKeplerManually() {
+            const cdnInfo = document.getElementById('cdnInfo');
+            const retryBtn = document.getElementById('retryBtn');
+            
+            if (keplerLoadAttempts >= maxKeplerAttempts) {
+                cdnInfo.innerHTML = '❌ All CDN sources failed. Please check your network connection.';
+                cdnInfo.style.background = 'rgba(245, 101, 101, 0.1)';
+                cdnInfo.style.borderColor = '#f56565';
+                cdnInfo.style.color = '#c53030';
+                return false;
+            }
+
+            const currentCDN = keplerCDNs[keplerLoadAttempts];
+            cdnInfo.innerHTML = `🔄 Trying CDN ${keplerLoadAttempts + 1}/${maxKeplerAttempts}: ${currentCDN.includes('jsdelivr') ? 'jsDelivr' : currentCDN.includes('unpkg') ? 'unpkg' : 'cdnjs'}`;
+            
+            try {
+                await loadScript(currentCDN);
+                
+                // 等待库可用
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                if (typeof KeplerGl !== 'undefined') {
+                    cdnInfo.innerHTML = `✅ Kepler.gl loaded successfully from ${currentCDN.includes('jsdelivr') ? 'jsDelivr' : currentCDN.includes('unpkg') ? 'unpkg' : 'cdnjs'}!`;
+                    cdnInfo.style.background = 'rgba(72, 187, 120, 0.1)';
+                    cdnInfo.style.borderColor = '#48bb78';
+                    cdnInfo.style.color = '#2f855a';
+                    retryBtn.style.display = 'none';
+                    
+                    checkLibraryStatus();
+                    return true;
+                } else {
+                    throw new Error('KeplerGl not available after loading');
+                }
+            } catch (error) {
+                keplerLoadAttempts++;
+                debugLog(`CDN ${keplerLoadAttempts} failed: ${error.message}`);
+                
+                if (keplerLoadAttempts < maxKeplerAttempts) {
+                    retryBtn.style.display = 'inline-flex';
+                    return tryLoadKeplerManually();
+                } else {
+                    cdnInfo.innerHTML = '❌ All CDN sources failed. Please refresh the page or check your network.';
+                    cdnInfo.style.background = 'rgba(245, 101, 101, 0.1)';
+                    cdnInfo.style.borderColor = '#f56565';
+                    cdnInfo.style.color = '#c53030';
+                    return false;
+                }
+            }
+        }
 
         // 检查库加载状态
         function checkLibraryStatus() {
@@ -351,10 +441,16 @@
                 statusEl.style.background = 'rgba(72, 187, 120, 0.1)';
                 statusEl.style.borderColor = '#48bb78';
                 statusEl.style.color = '#2f855a';
+                document.getElementById('retryBtn').style.display = 'none';
             } else {
                 statusEl.style.background = 'rgba(245, 101, 101, 0.1)';
                 statusEl.style.borderColor = '#f56565';
                 statusEl.style.color = '#c53030';
+                
+                // 如果只有KeplerGl没加载，显示重试按钮
+                if (!checks.KeplerGl && Object.values({...checks, KeplerGl: true}).filter(Boolean).length >= 4) {
+                    document.getElementById('retryBtn').style.display = 'inline-flex';
+                }
             }
             
             return librariesLoaded;
@@ -376,13 +472,24 @@
         function waitForLibraries() {
             return new Promise((resolve) => {
                 let attempts = 0;
-                const maxAttempts = 50; // 5秒超时
+                const maxAttempts = 100; // 10秒超时
                 
                 const checkInterval = setInterval(() => {
                     attempts++;
-                    if (checkLibraryStatus() || attempts >= maxAttempts) {
+                    const loaded = checkLibraryStatus();
+                    
+                    if (loaded) {
                         clearInterval(checkInterval);
-                        resolve(librariesLoaded);
+                        resolve(true);
+                    } else if (attempts >= maxAttempts) {
+                        clearInterval(checkInterval);
+                        // 如果其他库都加载了，只是Kepler.gl没加载，尝试手动加载
+                        if (typeof React !== 'undefined' && typeof ReactDOM !== 'undefined' && typeof KeplerGl === 'undefined') {
+                            debugLog('Attempting to load Kepler.gl manually');
+                            tryLoadKeplerManually().then(resolve);
+                        } else {
+                            resolve(false);
+                        }
                     }
                 }, 100);
             });
@@ -418,7 +525,7 @@
                 setupEventListeners();
             } else {
                 debugLog('ERROR: Some libraries failed to load');
-                showError('Failed to load required libraries. Please refresh the page.');
+                showError('Failed to load required libraries. Please try the retry button or refresh the page.');
             }
         });
 
@@ -437,7 +544,7 @@
                 return;
             }
 
-            // File input change event
+            // File input events
             fileInput.addEventListener('change', function(e) {
                 debugLog('File input change event triggered');
                 handleFileSelect(e);
@@ -707,7 +814,7 @@
                 ReactDOM.render(keplerElement, mapContainer);
                 debugLog('Kepler.gl component rendered');
 
-                // Add data after a short delay
+                // Add data after a delay
                 setTimeout(() => {
                     try {
                         const datasets = [{
@@ -726,12 +833,7 @@
                             });
                             debugLog('Data added to Kepler.gl map');
                         } else {
-                            debugLog('WARNING: keplerGl.addDataToMap not available, trying alternative method');
-                            // 备用方法：直接使用组件实例
-                            const keplerInstance = document.querySelector('#mapContainer').firstChild;
-                            if (keplerInstance && keplerInstance._reactInternalInstance) {
-                                debugLog('Using component instance to add data');
-                            }
+                            debugLog('WARNING: keplerGl.addDataToMap not available');
                         }
                     } catch (error) {
                         debugLog(`Error adding data to map: ${error.message}`);
@@ -858,7 +960,14 @@
         // Initialize on load
         window.addEventListener('load', function() {
             debugLog('Window loaded');
-            setTimeout(checkLibraryStatus, 500); // 给库一些时间加载
+            setTimeout(() => {
+                checkLibraryStatus();
+                // 如果Kepler.gl没有加载，自动尝试加载
+                if (typeof KeplerGl === 'undefined') {
+                    debugLog('KeplerGl not found, attempting manual load');
+                    tryLoadKeplerManually();
+                }
+            }, 1000);
             updateLoadingState(true, 'Ready to process your data', 'Upload your express_parcel.csv file to start Python-powered visualization');
         });
 
