@@ -3,17 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Express Parcel Visualization - Python Flask</title>
+    <title>Express Parcel Visualization - Flask + Kepler.gl</title>
     
-    <!-- 方案1: 使用jsDelivr CDN作为主要源 -->
-    <script crossorigin src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script crossorigin src="https://cdn.jsdelivr.net/npm/redux@4.2.1/dist/redux.min.js"></script>
-    <script crossorigin src="https://cdn.jsdelivr.net/npm/react-redux@8.1.2/dist/react-redux.min.js"></script>
-    <script crossorigin src="https://cdn.jsdelivr.net/npm/styled-components@5.3.11/dist/styled-components.min.js"></script>
+    <!-- 官方推荐的UMD依赖加载 -->
+    <script src="https://unpkg.com/react@16/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@16/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/redux@3.7.2/dist/redux.js"></script>
+    <script src="https://unpkg.com/react-redux@5.1.1/dist/react-redux.min.js"></script>
+    <script src="https://unpkg.com/styled-components@4.1.3/dist/styled-components.min.js"></script>
     
-    <!-- Kepler.gl 使用多个备用源 -->
-    <script crossorigin src="https://cdn.jsdelivr.net/npm/kepler.gl@3.0.0/umd/keplergl.min.js"></script>
+    <!-- Kepler.gl 官方UMD包 -->
+    <script src="https://unpkg.com/kepler.gl@2.5.5/umd/keplergl.min.js"></script>
     
     <style>
         * {
@@ -247,32 +247,12 @@
             to { opacity: 1; transform: translateY(0); }
         }
         
-        .debug-info {
-            background: rgba(255, 255, 255, 0.1);
-            color: #2d3748;
-            padding: 0.5rem;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            margin-top: 0.5rem;
-            display: none;
-        }
-        
         .library-status {
-            background: rgba(102, 126, 234, 0.1);
-            color: #4c51bf;
-            padding: 0.5rem;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            margin-top: 0.5rem;
-            border: 1px solid #667eea;
-        }
-        
-        .cdn-info {
             background: rgba(72, 187, 120, 0.1);
             color: #2f855a;
             padding: 0.5rem;
             border-radius: 4px;
-            font-size: 0.75rem;
+            font-size: 0.8rem;
             margin-top: 0.5rem;
             border: 1px solid #48bb78;
         }
@@ -284,7 +264,7 @@
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <div>
                     <h1>🐍 Express Parcel Visualization</h1>
-                    <p>Python Flask + Kepler.gl Real-time Logistics Dashboard</p>
+                    <p>Python Flask + Kepler.gl Official UMD Integration</p>
                 </div>
                 <div class="python-badge">Python Flask</div>
             </div>
@@ -297,13 +277,7 @@
                         Processes first 500 records for optimal performance
                     </div>
                     <div class="library-status" id="libraryStatus">
-                        📚 Checking library status...
-                    </div>
-                    <div class="cdn-info" id="cdnInfo">
-                        🌐 Using jsDelivr CDN for better global access
-                    </div>
-                    <div class="debug-info" id="debugInfo">
-                        Debug: Waiting for file selection...
+                        ✅ Kepler.gl Official UMD Ready
                     </div>
                 </div>
                 
@@ -316,9 +290,6 @@
                     </button>
                     <button class="btn btn-secondary" onclick="resetVisualization()" id="resetBtn" disabled>
                         🔄 Reset
-                    </button>
-                    <button class="btn btn-secondary" onclick="tryLoadKeplerManually()" id="retryBtn" style="display: none;">
-                        🔄 Retry Load
                     </button>
                 </div>
             </div>
@@ -333,7 +304,7 @@
                 <div class="loading-spinner"></div>
                 <div class="loading-text" id="loadingText">Ready to process your data</div>
                 <div class="loading-details" id="loadingDetails">
-                    Upload your express_parcel.csv file to start Python-powered visualization
+                    Upload your express_parcel.csv file to start visualization
                 </div>
             </div>
             
@@ -342,549 +313,254 @@
     </div>
 
     <script>
+        // Mapbox Token - 需要替换为实际的token
+        const MAPBOX_TOKEN = 'PROVIDE_MAPBOX_TOKEN'; // 这里需要添加你的Mapbox token
+        
+        // 全局变量
         let processedData = null;
-        let debugMode = true;
-        let librariesLoaded = false;
-        let keplerLoadAttempts = 0;
-        const maxKeplerAttempts = 3;
-
-        // 备用CDN列表
-        const keplerCDNs = [
-            'https://cdn.jsdelivr.net/npm/kepler.gl@3.0.0/umd/keplergl.min.js',
-            'https://unpkg.com/kepler.gl@3.0.0/umd/keplergl.min.js',
-            'https://cdnjs.cloudflare.com/ajax/libs/kepler.gl/3.0.0/keplergl.min.js'
-        ];
-
-        // 动态加载脚本
-        function loadScript(src) {
-            return new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                script.src = src;
-                script.crossOrigin = 'anonymous';
-                script.onload = () => resolve(src);
-                script.onerror = () => reject(new Error(`Failed to load ${src}`));
-                document.head.appendChild(script);
-            });
-        }
-
-        // 手动尝试加载Kepler.gl
-        async function tryLoadKeplerManually() {
-            const cdnInfo = document.getElementById('cdnInfo');
-            const retryBtn = document.getElementById('retryBtn');
-            
-            if (keplerLoadAttempts >= maxKeplerAttempts) {
-                cdnInfo.innerHTML = '❌ All CDN sources failed. Please check your network connection.';
-                cdnInfo.style.background = 'rgba(245, 101, 101, 0.1)';
-                cdnInfo.style.borderColor = '#f56565';
-                cdnInfo.style.color = '#c53030';
-                return false;
-            }
-
-            const currentCDN = keplerCDNs[keplerLoadAttempts];
-            cdnInfo.innerHTML = `🔄 Trying CDN ${keplerLoadAttempts + 1}/${maxKeplerAttempts}: ${currentCDN.includes('jsdelivr') ? 'jsDelivr' : currentCDN.includes('unpkg') ? 'unpkg' : 'cdnjs'}`;
-            
-            try {
-                await loadScript(currentCDN);
-                
-                // 等待库可用
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                
-                if (typeof KeplerGl !== 'undefined') {
-                    cdnInfo.innerHTML = `✅ Kepler.gl loaded successfully from ${currentCDN.includes('jsdelivr') ? 'jsDelivr' : currentCDN.includes('unpkg') ? 'unpkg' : 'cdnjs'}!`;
-                    cdnInfo.style.background = 'rgba(72, 187, 120, 0.1)';
-                    cdnInfo.style.borderColor = '#48bb78';
-                    cdnInfo.style.color = '#2f855a';
-                    retryBtn.style.display = 'none';
-                    
-                    checkLibraryStatus();
-                    return true;
-                } else {
-                    throw new Error('KeplerGl not available after loading');
-                }
-            } catch (error) {
-                keplerLoadAttempts++;
-                debugLog(`CDN ${keplerLoadAttempts} failed: ${error.message}`);
-                
-                if (keplerLoadAttempts < maxKeplerAttempts) {
-                    retryBtn.style.display = 'inline-flex';
-                    return tryLoadKeplerManually();
-                } else {
-                    cdnInfo.innerHTML = '❌ All CDN sources failed. Please refresh the page or check your network.';
-                    cdnInfo.style.background = 'rgba(245, 101, 101, 0.1)';
-                    cdnInfo.style.borderColor = '#f56565';
-                    cdnInfo.style.color = '#c53030';
-                    return false;
-                }
-            }
-        }
-
-        // 检查库加载状态
-        function checkLibraryStatus() {
-            const statusEl = document.getElementById('libraryStatus');
-            const checks = {
-                'React': typeof React !== 'undefined',
-                'ReactDOM': typeof ReactDOM !== 'undefined',
-                'Redux': typeof Redux !== 'undefined',
-                'ReactRedux': typeof ReactRedux !== 'undefined',
-                'KeplerGl': typeof KeplerGl !== 'undefined'
+        let keplerGlApp = null;
+        
+        // 检查依赖库是否加载完成
+        function checkLibrariesLoaded() {
+            const libraries = {
+                React: typeof React !== 'undefined',
+                ReactDOM: typeof ReactDOM !== 'undefined',
+                Redux: typeof Redux !== 'undefined',
+                ReactRedux: typeof ReactRedux !== 'undefined',
+                KeplerGl: typeof KeplerGl !== 'undefined'
             };
             
-            const results = Object.entries(checks).map(([name, loaded]) => 
-                `${loaded ? '✅' : '❌'} ${name}`
-            ).join(' | ');
+            const allLoaded = Object.values(libraries).every(Boolean);
             
-            statusEl.innerHTML = `📚 Libraries: ${results}`;
-            
-            librariesLoaded = Object.values(checks).every(Boolean);
-            
-            if (librariesLoaded) {
-                statusEl.style.background = 'rgba(72, 187, 120, 0.1)';
-                statusEl.style.borderColor = '#48bb78';
-                statusEl.style.color = '#2f855a';
-                document.getElementById('retryBtn').style.display = 'none';
+            if (allLoaded) {
+                document.getElementById('libraryStatus').innerHTML = '✅ All libraries loaded successfully';
+                return true;
             } else {
-                statusEl.style.background = 'rgba(245, 101, 101, 0.1)';
-                statusEl.style.borderColor = '#f56565';
-                statusEl.style.color = '#c53030';
-                
-                // 如果只有KeplerGl没加载，显示重试按钮
-                if (!checks.KeplerGl && Object.values({...checks, KeplerGl: true}).filter(Boolean).length >= 4) {
-                    document.getElementById('retryBtn').style.display = 'inline-flex';
-                }
+                const failed = Object.entries(libraries)
+                    .filter(([_, loaded]) => !loaded)
+                    .map(([name]) => name);
+                document.getElementById('libraryStatus').innerHTML = `❌ Missing: ${failed.join(', ')}`;
+                return false;
+            }
+        }
+        
+        // 初始化Kepler.gl应用
+        function initializeKeplerGl() {
+            if (!checkLibrariesLoaded()) {
+                console.error('Libraries not fully loaded');
+                return false;
             }
             
-            return librariesLoaded;
+            // 创建Redux store
+            const reducers = Redux.combineReducers({
+                keplerGl: KeplerGl.keplerGlReducer
+            });
+            
+            const store = Redux.createStore(reducers, {});
+            
+            // 创建Kepler.gl组件
+            const KeplerElement = React.createElement(
+                ReactRedux.Provider,
+                { store },
+                React.createElement(KeplerGl.default, {
+                    id: "map",
+                    mapboxApiAccessToken: MAPBOX_TOKEN,
+                    width: window.innerWidth,
+                    height: window.innerHeight - 200
+                })
+            );
+            
+            // 渲染到容器
+            const mapContainer = document.getElementById('mapContainer');
+            ReactDOM.render(KeplerElement, mapContainer);
+            
+            // 保存store引用以便后续使用
+            keplerGlApp = { store, mapId: "map" };
+            
+            return true;
         }
-
-        // 调试函数
-        function debugLog(message) {
-            if (debugMode) {
-                console.log('[DEBUG]', message);
-                const debugInfo = document.getElementById('debugInfo');
-                if (debugInfo) {
-                    debugInfo.style.display = 'block';
-                    debugInfo.textContent = 'Debug: ' + message;
-                }
+        
+        // 添加数据到地图
+        function addDataToMap(data, config = null) {
+            if (!keplerGlApp) {
+                console.error('Kepler.gl not initialized');
+                return;
             }
-        }
-
-        // 等待库加载完成
-        function waitForLibraries() {
-            return new Promise((resolve) => {
-                let attempts = 0;
-                const maxAttempts = 100; // 10秒超时
-                
-                const checkInterval = setInterval(() => {
-                    attempts++;
-                    const loaded = checkLibraryStatus();
-                    
-                    if (loaded) {
-                        clearInterval(checkInterval);
-                        resolve(true);
-                    } else if (attempts >= maxAttempts) {
-                        clearInterval(checkInterval);
-                        // 如果其他库都加载了，只是Kepler.gl没加载，尝试手动加载
-                        if (typeof React !== 'undefined' && typeof ReactDOM !== 'undefined' && typeof KeplerGl === 'undefined') {
-                            debugLog('Attempting to load Kepler.gl manually');
-                            tryLoadKeplerManually().then(resolve);
-                        } else {
-                            resolve(false);
+            
+            const datasets = [{
+                info: {
+                    id: 'shipments',
+                    label: 'Express Parcel Shipments'
+                },
+                data: {
+                    fields: [
+                        { name: 'origin_lat', type: 'real' },
+                        { name: 'origin_lng', type: 'real' },
+                        { name: 'dest_lat', type: 'real' },
+                        { name: 'dest_lng', type: 'real' },
+                        { name: 'shipment_date', type: 'timestamp' },
+                        { name: 'warehouse_name', type: 'string' },
+                        { name: 'dest_address', type: 'string' },
+                        { name: 'weight', type: 'real' },
+                        { name: 'distance_km', type: 'real' }
+                    ],
+                    rows: data
+                }
+            }];
+            
+            // 默认配置
+            const defaultConfig = {
+                visState: {
+                    layers: [
+                        {
+                            id: 'arc-layer',
+                            type: 'arc',
+                            config: {
+                                dataId: 'shipments',
+                                label: 'Shipping Routes',
+                                color: [255, 0, 0],
+                                columns: {
+                                    lat0: 'origin_lat',
+                                    lng0: 'origin_lng',
+                                    lat1: 'dest_lat',
+                                    lng1: 'dest_lng'
+                                },
+                                isVisible: true,
+                                visConfig: {
+                                    opacity: 0.8,
+                                    thickness: 2,
+                                    colorRange: {
+                                        name: 'Global Warming',
+                                        type: 'sequential',
+                                        colors: ['#5A1846', '#900C3F', '#C70039', '#E3611C', '#F1920E', '#FFC300']
+                                    }
+                                }
+                            }
                         }
+                    ]
+                },
+                mapState: {
+                    latitude: 39.8,
+                    longitude: -98.0,
+                    zoom: 4
+                }
+            };
+            
+            // 使用官方API添加数据
+            keplerGlApp.store.dispatch(
+                KeplerGl.addDataToMap({
+                    datasets,
+                    config: config || defaultConfig,
+                    options: {
+                        centerMap: true,
+                        readOnly: false
                     }
-                }, 100);
-            });
+                })
+            );
         }
-
-        // 触发文件上传
-        function triggerFileUpload() {
-            debugLog('Upload button clicked');
-            
-            if (!librariesLoaded) {
-                showError('Libraries are still loading. Please wait a moment and try again.');
-                return;
-            }
-            
-            const fileInput = document.getElementById('fileInput');
-            if (fileInput) {
-                debugLog('File input found, triggering click');
-                fileInput.click();
-            } else {
-                debugLog('ERROR: File input not found');
-                showError('File input element not found');
-            }
-        }
-
-        // Initialize
-        document.addEventListener('DOMContentLoaded', async function() {
-            debugLog('DOM loaded, waiting for libraries');
-            
-            // 等待库加载
-            const loaded = await waitForLibraries();
-            if (loaded) {
-                debugLog('All libraries loaded successfully');
-                setupEventListeners();
-            } else {
-                debugLog('ERROR: Some libraries failed to load');
-                showError('Failed to load required libraries. Please try the retry button or refresh the page.');
-            }
-        });
-
-        function setupEventListeners() {
-            const fileInput = document.getElementById('fileInput');
-            const uploadArea = document.getElementById('uploadArea');
-
-            if (!fileInput) {
-                debugLog('ERROR: File input element not found during setup');
-                showError('File input initialization failed');
-                return;
-            }
-
-            if (!uploadArea) {
-                debugLog('ERROR: Upload area element not found during setup');
-                return;
-            }
-
-            // File input events
-            fileInput.addEventListener('change', function(e) {
-                debugLog('File input change event triggered');
-                handleFileSelect(e);
-            });
-
-            fileInput.addEventListener('input', function(e) {
-                debugLog('File input "input" event triggered');
-                handleFileSelect(e);
-            });
-
-            // Drag and drop events
-            uploadArea.addEventListener('dragover', function(e) {
-                e.preventDefault();
-                debugLog('Drag over detected');
-                handleDragOver(e);
-            });
-
-            uploadArea.addEventListener('dragleave', function(e) {
-                debugLog('Drag leave detected');
-                handleDragLeave();
-            });
-
-            uploadArea.addEventListener('drop', function(e) {
-                e.preventDefault();
-                debugLog('File drop detected');
-                handleFileDrop(e);
-            });
-
-            uploadArea.addEventListener('click', function(e) {
-                debugLog('Upload area clicked');
-                triggerFileUpload();
-            });
-
-            debugLog('All event listeners set up successfully');
-        }
-
-        function handleDragOver(e) {
-            e.preventDefault();
-            document.getElementById('uploadArea').classList.add('dragover');
-        }
-
-        function handleDragLeave() {
-            document.getElementById('uploadArea').classList.remove('dragover');
-        }
-
-        function handleFileDrop(e) {
-            e.preventDefault();
-            document.getElementById('uploadArea').classList.remove('dragover');
-            
-            const files = e.dataTransfer.files;
-            debugLog(`Files dropped: ${files.length}`);
-            
-            if (files.length > 0) {
-                debugLog(`Processing dropped file: ${files[0].name}`);
-                uploadFile(files[0]);
-            } else {
-                debugLog('No files in drop event');
-            }
-        }
-
-        function handleFileSelect(e) {
-            debugLog('handleFileSelect called');
-            
-            const files = e.target.files;
-            debugLog(`Files selected: ${files ? files.length : 0}`);
-            
-            if (files && files.length > 0) {
-                const file = files[0];
-                debugLog(`Selected file: ${file.name}, size: ${file.size}, type: ${file.type}`);
-                uploadFile(file);
-            } else {
-                debugLog('No files selected or files array empty');
-                showError('No file was selected. Please try again.');
-            }
-        }
-
+        
+        // 文件上传处理
         async function uploadFile(file) {
-            debugLog(`Starting upload for file: ${file.name}`);
-            
-            if (!file) {
-                debugLog('ERROR: No file provided to uploadFile function');
-                showError('No file provided');
-                return;
-            }
-
-            if (!file.name.toLowerCase().endsWith('.csv')) {
-                debugLog(`ERROR: Invalid file type: ${file.name}`);
+            if (!file || !file.name.toLowerCase().endsWith('.csv')) {
                 showError('Please upload a CSV file');
                 return;
             }
-
-            if (!librariesLoaded) {
-                debugLog('ERROR: Libraries not loaded yet');
-                showError('Visualization libraries are still loading. Please wait and try again.');
-                return;
-            }
-
-            debugLog('File validation passed, starting upload process');
+            
             updateLoadingState(true, 'Uploading file...', 'Sending data to Python Flask server...');
-
+            
             try {
                 const formData = new FormData();
                 formData.append('file', file);
                 
-                debugLog('FormData created, making fetch request');
-
                 const response = await fetch('/api/upload', {
                     method: 'POST',
                     body: formData
                 });
-
-                debugLog(`Server response status: ${response.status}`);
-
+                
                 const result = await response.json();
-                debugLog('Server response received');
-
+                
                 if (!response.ok) {
                     throw new Error(result.error || `Server error: ${response.status}`);
                 }
-
-                debugLog('Upload successful, creating visualization');
-                updateLoadingState(true, 'Creating visualization...', 'Rendering Kepler.gl map...');
-
-                // Create visualization with processed data
-                await createVisualization(result.data);
                 
-                // Update statistics
+                updateLoadingState(true, 'Creating visualization...', 'Rendering Kepler.gl map...');
+                
+                // 添加数据到地图
+                addDataToMap(result.data);
+                
+                // 更新统计信息
                 updateStats(result.stats);
                 
                 setTimeout(() => {
                     updateLoadingState(false);
                     const message = result.stats.original_count > 500 
-                        ? `Successfully visualized ${result.stats.total_records} routes (limited to first 500 records out of ${result.stats.original_count} total)`
+                        ? `Successfully visualized ${result.stats.total_records} routes (limited to first 500 records)`
                         : `Successfully visualized ${result.stats.total_records} shipment routes!`;
                     showSuccess(message);
-                    debugLog('Visualization completed successfully');
-                }, 500);
-
-                // Enable reset button
+                }, 1000);
+                
                 document.getElementById('resetBtn').disabled = false;
                 processedData = result.data;
-
+                
             } catch (error) {
-                debugLog(`Upload error: ${error.message}`);
                 console.error('Upload error:', error);
                 updateLoadingState(false);
                 showError('Processing failed: ' + error.message);
             }
         }
-
-        async function createVisualization(data) {
-            debugLog('Creating Kepler.gl visualization');
-            
-            if (!window.KeplerGl) {
-                throw new Error('KeplerGl library is not available');
+        
+        // 事件处理函数
+        function triggerFileUpload() {
+            if (!keplerGlApp) {
+                showError('Kepler.gl not initialized. Please refresh the page.');
+                return;
             }
-            
-            const mapConfig = {
-                version: 'v1',
-                config: {
-                    mapState: {
-                        latitude: 39.8,
-                        longitude: -98.0,
-                        zoom: 4,
-                        pitch: 20,
-                        bearing: 0
-                    },
-                    visState: {
-                        filters: [
-                            {
-                                dataId: ['shipments'],
-                                id: 'date_filter',
-                                name: ['shipment_date'],
-                                type: 'timeRange',
-                                enlarged: false
-                            }
-                        ],
-                        layers: [
-                            {
-                                id: 'arc_layer',
-                                type: 'arc',
-                                config: {
-                                    dataId: 'shipments',
-                                    label: 'Shipping Routes',
-                                    color: [255, 0, 0],
-                                    columns: {
-                                        lat0: 'origin_lat',
-                                        lng0: 'origin_lng',
-                                        lat1: 'dest_lat',
-                                        lng1: 'dest_lng'
-                                    },
-                                    isVisible: true,
-                                    visConfig: {
-                                        opacity: 0.8,
-                                        thickness: 3,
-                                        colorRange: {
-                                            name: 'Global Warming',
-                                            type: 'sequential',
-                                            colors: ['#5A1846', '#900C3F', '#C70039', '#E3611C', '#F1920E', '#FFC300']
-                                        },
-                                        sizeRange: [1, 10],
-                                        targetColor: [255, 255, 255]
-                                    }
-                                }
-                            },
-                            {
-                                id: 'warehouse_points',
-                                type: 'point',
-                                config: {
-                                    dataId: 'shipments',
-                                    label: 'Warehouses',
-                                    color: [0, 255, 0],
-                                    columns: {
-                                        lat: 'origin_lat',
-                                        lng: 'origin_lng'
-                                    },
-                                    isVisible: true,
-                                    visConfig: {
-                                        opacity: 1,
-                                        radius: 25,
-                                        radiusRange: [15, 50],
-                                        outline: true,
-                                        colorRange: {
-                                            name: 'ColorBrewer Set1-9',
-                                            type: 'qualitative',
-                                            colors: ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#f781bf', '#999999']
-                                        }
-                                    }
-                                }
-                            },
-                            {
-                                id: 'destination_points',
-                                type: 'point',
-                                config: {
-                                    dataId: 'shipments',
-                                    label: 'Destinations',
-                                    color: [0, 100, 255],
-                                    columns: {
-                                        lat: 'dest_lat',
-                                        lng: 'dest_lng'
-                                    },
-                                    isVisible: true,
-                                    visConfig: {
-                                        opacity: 0.7,
-                                        radius: 8,
-                                        radiusRange: [3, 20]
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                }
-            };
-
-            try {
-                const mapContainer = document.getElementById('mapContainer');
-                mapContainer.innerHTML = '';
-
-                // Create Kepler instance
-                const keplerElement = React.createElement(KeplerGl, {
-                    id: 'flask-map',
-                    width: '100%',
-                    height: '100%',
-                    config: mapConfig.config
-                });
-
-                ReactDOM.render(keplerElement, mapContainer);
-                debugLog('Kepler.gl component rendered');
-
-                // Add data after a delay
-                setTimeout(() => {
-                    try {
-                        const datasets = [{
-                            info: {
-                                id: 'shipments',
-                                label: 'Express Parcel Shipments (Python Processed)'
-                            },
-                            data: data
-                        }];
-
-                        // 使用更可靠的方式添加数据
-                        if (window.keplerGl && window.keplerGl.addDataToMap) {
-                            window.keplerGl.addDataToMap({
-                                datasets: datasets,
-                                config: mapConfig.config
-                            });
-                            debugLog('Data added to Kepler.gl map');
-                        } else {
-                            debugLog('WARNING: keplerGl.addDataToMap not available');
-                        }
-                    } catch (error) {
-                        debugLog(`Error adding data to map: ${error.message}`);
-                        console.error('Error adding data to map:', error);
-                    }
-                }, 2000);
-
-            } catch (error) {
-                debugLog(`Visualization creation failed: ${error.message}`);
-                console.error('Visualization creation failed:', error);
-                throw error;
+            document.getElementById('fileInput').click();
+        }
+        
+        function handleFileSelect(e) {
+            const files = e.target.files;
+            if (files && files.length > 0) {
+                uploadFile(files[0]);
             }
         }
-
+        
+        function handleDragOver(e) {
+            e.preventDefault();
+            document.getElementById('uploadArea').classList.add('dragover');
+        }
+        
+        function handleDragLeave() {
+            document.getElementById('uploadArea').classList.remove('dragover');
+        }
+        
+        function handleFileDrop(e) {
+            e.preventDefault();
+            document.getElementById('uploadArea').classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                uploadFile(files[0]);
+            }
+        }
+        
+        // 工具函数
         function updateStats(stats) {
             const container = document.getElementById('statsContainer');
-            
             container.innerHTML = `
-                <div class="stat-item">
-                    ${stats.total_records} Records
-                </div>
-                <div class="stat-item">
-                    ${stats.unique_warehouses} Warehouses
-                </div>
-                <div class="stat-item">
-                    ${stats.unique_destinations} Destinations
-                </div>
-                <div class="stat-item">
-                    ${Math.round(stats.total_distance).toLocaleString()} km Total Distance
-                </div>
-                <div class="stat-item">
-                    ${stats.date_range.start} → ${stats.date_range.end}
-                </div>
+                <div class="stat-item">${stats.total_records} Records</div>
+                <div class="stat-item">${stats.unique_warehouses} Warehouses</div>
+                <div class="stat-item">${stats.unique_destinations} Destinations</div>
+                <div class="stat-item">${Math.round(stats.total_distance).toLocaleString()} km Total Distance</div>
+                <div class="stat-item">${stats.date_range.start} → ${stats.date_range.end}</div>
             `;
-            
-            if (stats.original_count > 500) {
-                const limitNote = document.createElement('div');
-                limitNote.className = 'stat-item';
-                limitNote.style.background = 'rgba(255, 193, 7, 0.3)';
-                limitNote.innerHTML = `Limited from ${stats.original_count} total`;
-                container.appendChild(limitNote);
-            }
-            
             container.style.display = 'flex';
         }
-
+        
         function updateLoadingState(loading, message = '', details = '') {
             const overlay = document.getElementById('loadingOverlay');
             const text = document.getElementById('loadingText');
             const detailsEl = document.getElementById('loadingDetails');
-
+            
             if (loading) {
                 overlay.classList.remove('hidden');
                 if (message) text.textContent = message;
@@ -893,27 +569,24 @@
                 overlay.classList.add('hidden');
             }
         }
-
+        
         function showError(message) {
-            debugLog(`Showing error: ${message}`);
             const errorDiv = document.createElement('div');
             errorDiv.className = 'error-message fade-in';
             errorDiv.innerHTML = `⚠️ ${message}`;
             document.querySelector('.header').appendChild(errorDiv);
             setTimeout(() => errorDiv.remove(), 8000);
         }
-
+        
         function showSuccess(message) {
-            debugLog(`Showing success: ${message}`);
             const successDiv = document.createElement('div');
             successDiv.className = 'success-message fade-in';
             successDiv.innerHTML = `✅ ${message}`;
             document.querySelector('.header').appendChild(successDiv);
             setTimeout(() => successDiv.remove(), 5000);
         }
-
+        
         async function downloadSample() {
-            debugLog('Downloading sample data');
             try {
                 const response = await fetch('/api/sample');
                 const blob = await response.blob();
@@ -925,56 +598,64 @@
                 a.click();
                 document.body.removeChild(a);
                 window.URL.revokeObjectURL(url);
-                
-                showSuccess('Sample CSV downloaded! Upload it to see the Python-powered visualization.');
-                debugLog('Sample download completed');
+                showSuccess('Sample CSV downloaded!');
             } catch (error) {
-                debugLog(`Sample download failed: ${error.message}`);
                 showError('Failed to download sample data');
             }
         }
-
+        
         function resetVisualization() {
-            debugLog('Resetting visualization');
             processedData = null;
-            
-            const mapContainer = document.getElementById('mapContainer');
-            mapContainer.innerHTML = '';
-            
+            document.getElementById('mapContainer').innerHTML = '';
             document.getElementById('fileInput').value = '';
             document.getElementById('statsContainer').style.display = 'none';
             document.getElementById('resetBtn').disabled = true;
             
-            const debugInfo = document.getElementById('debugInfo');
-            if (debugInfo) {
-                debugInfo.style.display = 'none';
-            }
+            // 重新初始化Kepler.gl
+            initializeKeplerGl();
             
-            updateLoadingState(true, 'Ready to process your data', 'Upload your express_parcel.csv file to start Python-powered visualization');
-            
+            updateLoadingState(true, 'Ready to process your data', 'Upload your express_parcel.csv file to start visualization');
             document.querySelectorAll('.error-message, .success-message').forEach(el => el.remove());
-            
-            debugLog('Reset completed');
         }
-
-        // Initialize on load
-        window.addEventListener('load', function() {
-            debugLog('Window loaded');
+        
+        // 页面初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            // 等待所有脚本加载完成
             setTimeout(() => {
-                checkLibraryStatus();
-                // 如果Kepler.gl没有加载，自动尝试加载
-                if (typeof KeplerGl === 'undefined') {
-                    debugLog('KeplerGl not found, attempting manual load');
-                    tryLoadKeplerManually();
+                if (initializeKeplerGl()) {
+                    console.log('Kepler.gl initialized successfully');
+                    
+                    // 设置事件监听器
+                    document.getElementById('fileInput').addEventListener('change', handleFileSelect);
+                    
+                    const uploadArea = document.getElementById('uploadArea');
+                    uploadArea.addEventListener('dragover', handleDragOver);
+                    uploadArea.addEventListener('dragleave', handleDragLeave);
+                    uploadArea.addEventListener('drop', handleFileDrop);
+                    uploadArea.addEventListener('click', triggerFileUpload);
+                    
+                    updateLoadingState(true, 'Ready to process your data', 'Upload your express_parcel.csv file to start visualization');
+                } else {
+                    showError('Failed to initialize Kepler.gl. Please refresh the page.');
                 }
             }, 1000);
-            updateLoadingState(true, 'Ready to process your data', 'Upload your express_parcel.csv file to start Python-powered visualization');
         });
-
-        // Error handling
+        
+        // 窗口大小变化处理
+        window.addEventListener('resize', function() {
+            if (keplerGlApp) {
+                // 重新渲染以适应新尺寸
+                const mapContainer = document.getElementById('mapContainer');
+                if (mapContainer.children.length > 0) {
+                    resetVisualization();
+                }
+            }
+        });
+        
+        // 全局错误处理
         window.addEventListener('error', function(e) {
-            debugLog(`Global error: ${e.message}`);
             console.error('Global error:', e);
+            showError('An unexpected error occurred. Please try refreshing the page.');
         });
     </script>
 </body>
