@@ -3,16 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Express Parcel Visualization - Flask + Kepler.gl</title>
+    <title>Express Parcel Visualization - Flask + Kepler.gl Official</title>
     
-    <!-- 官方推荐的UMD依赖加载 - 使用稳定版本 -->
+    <!-- Kepler.gl官方推荐的UMD依赖 - 使用兼容版本 -->
     <script crossorigin src="https://unpkg.com/react@16/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@16/umd/react-dom.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/redux@3.7.2/dist/redux.js"></script>
     <script crossorigin src="https://unpkg.com/react-redux@5.1.1/dist/react-redux.min.js"></script>
     <script crossorigin src="https://unpkg.com/styled-components@4.1.3/dist/styled-components.min.js"></script>
     
-    <!-- Kepler.gl 官方UMD包 - 使用最新稳定版本 -->
+    <!-- Kepler.gl完整UMD包 -->
     <script crossorigin src="https://unpkg.com/kepler.gl@2.5.5/umd/keplergl.min.js"></script>
     
     <style>
@@ -263,10 +263,10 @@
         <header class="header">
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <div>
-                    <h1>🐍 Express Parcel Visualization</h1>
-                    <p>Python Flask + Kepler.gl Official UMD Integration</p>
+                    <h1>🗺️ Express Parcel Visualization</h1>
+                    <p>Flask + Kepler.gl Schema Manager Integration</p>
                 </div>
-                <div class="python-badge">Python Flask</div>
+                <div class="python-badge">Official UMD</div>
             </div>
             
             <div class="upload-section">
@@ -274,10 +274,10 @@
                     <div class="upload-icon">📤</div>
                     <div><strong>Drop CSV file here or click to browse</strong></div>
                     <div style="font-size: 0.8rem; color: #718096; margin-top: 0.5rem;">
-                        Processes first 500 records for optimal performance
+                        Using Kepler.gl Schema Manager for optimal performance
                     </div>
                     <div class="library-status" id="libraryStatus">
-                        ✅ Kepler.gl Official UMD Ready
+                        🔄 Checking libraries...
                     </div>
                 </div>
                 
@@ -302,9 +302,9 @@
         <main class="main-content">
             <div class="loading-overlay" id="loadingOverlay">
                 <div class="loading-spinner"></div>
-                <div class="loading-text" id="loadingText">Ready to process your data</div>
+                <div class="loading-text" id="loadingText">Initializing Kepler.gl...</div>
                 <div class="loading-details" id="loadingDetails">
-                    Upload your express_parcel.csv file to start visualization
+                    Setting up the official Schema Manager integration
                 </div>
             </div>
             
@@ -313,186 +313,221 @@
     </div>
 
     <script>
-        // Mapbox Token - 已配置
+        // Mapbox Token
         const MAPBOX_TOKEN = 'pk.eyJ1IjoieXV4dWFsYW4iLCJhIjoiY21idG03YmZlMDR2bDJxcHVoZjRjY2l2ciJ9.7NP8FWPFIAWtr7rLkhlc1A';
         
         // 全局变量
+        let store = null;
         let processedData = null;
-        let keplerGlApp = null;
+        const MAP_ID = 'flask-visualization-map';
         
-        // 检查依赖库是否加载完成
-        function checkLibrariesLoaded() {
-            console.log('Checking libraries...');
-            console.log('React:', typeof React);
-            console.log('ReactDOM:', typeof ReactDOM);
-            console.log('Redux:', typeof Redux);
-            console.log('ReactRedux:', typeof ReactRedux);
-            console.log('KeplerGl:', typeof KeplerGl);
-            console.log('window.KeplerGl:', typeof window.KeplerGl);
-            
-            const libraries = {
-                React: typeof React !== 'undefined',
-                ReactDOM: typeof ReactDOM !== 'undefined',
-                Redux: typeof Redux !== 'undefined',
-                ReactRedux: typeof ReactRedux !== 'undefined',
-                KeplerGl: typeof KeplerGl !== 'undefined' || typeof window.KeplerGl !== 'undefined'
-            };
-            
-            const allLoaded = Object.values(libraries).every(Boolean);
-            
-            if (allLoaded) {
-                document.getElementById('libraryStatus').innerHTML = '✅ All libraries loaded successfully';
-                document.getElementById('libraryStatus').style.background = 'rgba(72, 187, 120, 0.1)';
-                document.getElementById('libraryStatus').style.borderColor = '#48bb78';
-                document.getElementById('libraryStatus').style.color = '#2f855a';
-                return true;
+        // 等待所有库加载完成
+        function waitForLibraries() {
+            return new Promise((resolve) => {
+                let attempts = 0;
+                const maxAttempts = 50; // 5秒超时
+                
+                const checkInterval = setInterval(() => {
+                    attempts++;
+                    
+                    const allLoaded = 
+                        typeof React !== 'undefined' &&
+                        typeof ReactDOM !== 'undefined' &&
+                        typeof Redux !== 'undefined' &&
+                        typeof ReactRedux !== 'undefined' &&
+                        typeof KeplerGl !== 'undefined';
+                    
+                    if (allLoaded) {
+                        console.log('All libraries loaded successfully');
+                        clearInterval(checkInterval);
+                        resolve(true);
+                    } else if (attempts >= maxAttempts) {
+                        console.error('Timeout waiting for libraries');
+                        clearInterval(checkInterval);
+                        resolve(false);
+                    }
+                }, 100);
+            });
+        }
+        
+        // 更新库状态显示
+        function updateLibraryStatus(status, message) {
+            const statusEl = document.getElementById('libraryStatus');
+            if (status === 'success') {
+                statusEl.innerHTML = `✅ ${message}`;
+                statusEl.style.background = 'rgba(72, 187, 120, 0.1)';
+                statusEl.style.borderColor = '#48bb78';
+                statusEl.style.color = '#2f855a';
+            } else if (status === 'error') {
+                statusEl.innerHTML = `❌ ${message}`;
+                statusEl.style.background = 'rgba(245, 101, 101, 0.1)';
+                statusEl.style.borderColor = '#f56565';
+                statusEl.style.color = '#c53030';
             } else {
-                const failed = Object.entries(libraries)
-                    .filter(([_, loaded]) => !loaded)
-                    .map(([name]) => name);
-                document.getElementById('libraryStatus').innerHTML = `❌ Missing: ${failed.join(', ')}`;
-                document.getElementById('libraryStatus').style.background = 'rgba(245, 101, 101, 0.1)';
-                document.getElementById('libraryStatus').style.borderColor = '#f56565';
-                document.getElementById('libraryStatus').style.color = '#c53030';
-                return false;
+                statusEl.innerHTML = `🔄 ${message}`;
             }
         }
         
         // 初始化Kepler.gl应用
-        function initializeKeplerGl() {
-            console.log('Initializing Kepler.gl...');
-            
-            if (!checkLibrariesLoaded()) {
-                console.error('Libraries not fully loaded');
-                return false;
-            }
-            
+        async function initializeKeplerGl() {
             try {
-                // 确保KeplerGl可用
-                const KeplerComponent = KeplerGl || window.KeplerGl;
-                if (!KeplerComponent) {
-                    throw new Error('KeplerGl component not found');
+                console.log('Initializing Kepler.gl with official method...');
+                updateLibraryStatus('loading', 'Initializing Kepler.gl...');
+                
+                // 等待库加载完成
+                const librariesLoaded = await waitForLibraries();
+                if (!librariesLoaded) {
+                    throw new Error('Required libraries failed to load');
                 }
                 
-                console.log('KeplerGl found:', KeplerComponent);
-                
-                // 创建Redux store
-                const reducers = Redux.combineReducers({
-                    keplerGl: KeplerComponent.keplerGlReducer
+                // 创建Redux store - 按照官方推荐方式
+                const rootReducer = Redux.combineReducers({
+                    keplerGl: KeplerGl.keplerGlReducer
                 });
                 
-                const store = Redux.createStore(reducers, {});
-                console.log('Redux store created');
+                store = Redux.createStore(rootReducer, {});
+                console.log('Redux store created:', store);
                 
-                // 创建Kepler.gl组件
-                const KeplerElement = React.createElement(
+                // 创建Kepler.gl应用组件 - 使用官方推荐结构
+                const app = React.createElement(
                     ReactRedux.Provider,
-                    { store },
-                    React.createElement(KeplerComponent.default || KeplerComponent, {
-                        id: "map",
+                    { store: store },
+                    React.createElement(KeplerGl.default || KeplerGl, {
+                        id: MAP_ID,
                         mapboxApiAccessToken: MAPBOX_TOKEN,
                         width: window.innerWidth,
-                        height: window.innerHeight - 200
+                        height: window.innerHeight - 200,
+                        theme: 'light'
                     })
                 );
                 
-                console.log('Kepler element created');
+                // 渲染到DOM
+                const container = document.getElementById('mapContainer');
+                ReactDOM.render(app, container);
                 
-                // 渲染到容器
-                const mapContainer = document.getElementById('mapContainer');
-                ReactDOM.render(KeplerElement, mapContainer);
-                
-                console.log('Kepler.gl rendered to container');
-                
-                // 保存store引用以便后续使用
-                keplerGlApp = { store, mapId: "map", KeplerComponent };
+                console.log('Kepler.gl component rendered successfully');
+                updateLibraryStatus('success', 'Kepler.gl initialized with Schema Manager');
                 
                 return true;
                 
             } catch (error) {
                 console.error('Failed to initialize Kepler.gl:', error);
+                updateLibraryStatus('error', 'Initialization failed: ' + error.message);
                 showError('Failed to initialize Kepler.gl: ' + error.message);
                 return false;
             }
         }
         
-        // 添加数据到地图
-        function addDataToMap(data, config = null) {
-            if (!keplerGlApp) {
-                console.error('Kepler.gl not initialized');
+        // 使用官方Schema Manager添加数据
+        function addDataToKepler(data, config = null) {
+            if (!store) {
+                console.error('Redux store not available');
                 return;
             }
             
-            const datasets = [{
-                info: {
-                    id: 'shipments',
-                    label: 'Express Parcel Shipments'
-                },
-                data: {
-                    fields: [
-                        { name: 'origin_lat', type: 'real' },
-                        { name: 'origin_lng', type: 'real' },
-                        { name: 'dest_lat', type: 'real' },
-                        { name: 'dest_lng', type: 'real' },
-                        { name: 'shipment_date', type: 'timestamp' },
-                        { name: 'warehouse_name', type: 'string' },
-                        { name: 'dest_address', type: 'string' },
-                        { name: 'weight', type: 'real' },
-                        { name: 'distance_km', type: 'real' }
-                    ],
-                    rows: data
-                }
-            }];
-            
-            // 默认配置
-            const defaultConfig = {
-                visState: {
-                    layers: [
-                        {
-                            id: 'arc-layer',
-                            type: 'arc',
-                            config: {
-                                dataId: 'shipments',
-                                label: 'Shipping Routes',
-                                color: [255, 0, 0],
-                                columns: {
-                                    lat0: 'origin_lat',
-                                    lng0: 'origin_lng',
-                                    lat1: 'dest_lat',
-                                    lng1: 'dest_lng'
-                                },
-                                isVisible: true,
-                                visConfig: {
-                                    opacity: 0.8,
-                                    thickness: 2,
-                                    colorRange: {
-                                        name: 'Global Warming',
-                                        type: 'sequential',
-                                        colors: ['#5A1846', '#900C3F', '#C70039', '#E3611C', '#F1920E', '#FFC300']
+            try {
+                console.log('Adding data using official addDataToMap action');
+                
+                // 准备数据集 - 按照官方格式
+                const datasets = [{
+                    info: {
+                        id: 'shipments',
+                        label: 'Express Parcel Shipments'
+                    },
+                    data: {
+                        fields: [
+                            { name: 'origin_lat', type: 'real' },
+                            { name: 'origin_lng', type: 'real' },
+                            { name: 'dest_lat', type: 'real' },
+                            { name: 'dest_lng', type: 'real' },
+                            { name: 'shipment_date', type: 'timestamp' },
+                            { name: 'warehouse_name', type: 'string' },
+                            { name: 'dest_address', type: 'string' },
+                            { name: 'weight', type: 'real' },
+                            { name: 'distance_km', type: 'real' }
+                        ],
+                        allData: data
+                    }
+                }];
+                
+                // 默认配置
+                const defaultConfig = {
+                    visState: {
+                        layers: [
+                            {
+                                id: 'shipping-routes',
+                                type: 'arc',
+                                config: {
+                                    dataId: 'shipments',
+                                    label: 'Shipping Routes',
+                                    color: [255, 0, 0],
+                                    columns: {
+                                        lat0: 'origin_lat',
+                                        lng0: 'origin_lng',
+                                        lat1: 'dest_lat',
+                                        lng1: 'dest_lng'
+                                    },
+                                    isVisible: true,
+                                    visConfig: {
+                                        opacity: 0.8,
+                                        thickness: 2,
+                                        colorRange: {
+                                            name: 'Global Warming',
+                                            type: 'sequential',
+                                            colors: ['#5A1846', '#900C3F', '#C70039', '#E3611C', '#F1920E', '#FFC300']
+                                        }
+                                    }
+                                }
+                            },
+                            {
+                                id: 'warehouse-points',
+                                type: 'point',
+                                config: {
+                                    dataId: 'shipments',
+                                    label: 'Warehouses',
+                                    color: [0, 255, 0],
+                                    columns: {
+                                        lat: 'origin_lat',
+                                        lng: 'origin_lng'
+                                    },
+                                    isVisible: true,
+                                    visConfig: {
+                                        opacity: 1,
+                                        radius: 20,
+                                        outline: true
                                     }
                                 }
                             }
-                        }
-                    ]
-                },
-                mapState: {
-                    latitude: 39.8,
-                    longitude: -98.0,
-                    zoom: 4
-                }
-            };
-            
-            // 使用官方API添加数据
-            keplerGlApp.store.dispatch(
-                KeplerGl.addDataToMap({
-                    datasets,
+                        ]
+                    },
+                    mapState: {
+                        latitude: 39.8,
+                        longitude: -98.0,
+                        zoom: 4,
+                        pitch: 20,
+                        bearing: 0
+                    }
+                };
+                
+                // 使用官方addDataToMap action
+                const addDataAction = KeplerGl.addDataToMap({
+                    datasets: datasets,
                     config: config || defaultConfig,
                     options: {
                         centerMap: true,
                         readOnly: false
                     }
-                })
-            );
+                });
+                
+                // Dispatch action到store
+                store.dispatch(addDataAction);
+                
+                console.log('Data successfully added to Kepler.gl using Schema Manager');
+                
+            } catch (error) {
+                console.error('Error adding data to Kepler.gl:', error);
+                showError('Failed to add data to map: ' + error.message);
+            }
         }
         
         // 文件上传处理
@@ -502,7 +537,12 @@
                 return;
             }
             
-            updateLoadingState(true, 'Uploading file...', 'Sending data to Python Flask server...');
+            if (!store) {
+                showError('Kepler.gl not initialized. Please refresh the page.');
+                return;
+            }
+            
+            updateLoadingState(true, 'Processing file...', 'Sending data to Flask server...');
             
             try {
                 const formData = new FormData();
@@ -519,10 +559,10 @@
                     throw new Error(result.error || `Server error: ${response.status}`);
                 }
                 
-                updateLoadingState(true, 'Creating visualization...', 'Rendering Kepler.gl map...');
+                updateLoadingState(true, 'Creating visualization...', 'Using Kepler.gl Schema Manager...');
                 
-                // 添加数据到地图
-                addDataToMap(result.data);
+                // 使用Schema Manager添加数据
+                addDataToKepler(result.data);
                 
                 // 更新统计信息
                 updateStats(result.stats);
@@ -547,8 +587,8 @@
         
         // 事件处理函数
         function triggerFileUpload() {
-            if (!keplerGlApp) {
-                showError('Kepler.gl not initialized. Please refresh the page.');
+            if (!store) {
+                showError('Kepler.gl not ready. Please wait for initialization to complete.');
                 return;
             }
             document.getElementById('fileInput').click();
@@ -586,7 +626,7 @@
                 <div class="stat-item">${stats.total_records} Records</div>
                 <div class="stat-item">${stats.unique_warehouses} Warehouses</div>
                 <div class="stat-item">${stats.unique_destinations} Destinations</div>
-                <div class="stat-item">${Math.round(stats.total_distance).toLocaleString()} km Total Distance</div>
+                <div class="stat-item">${Math.round(stats.total_distance).toLocaleString()} km Total</div>
                 <div class="stat-item">${stats.date_range.start} → ${stats.date_range.end}</div>
             `;
             container.style.display = 'flex';
@@ -642,71 +682,55 @@
         
         function resetVisualization() {
             processedData = null;
-            document.getElementById('mapContainer').innerHTML = '';
             document.getElementById('fileInput').value = '';
             document.getElementById('statsContainer').style.display = 'none';
             document.getElementById('resetBtn').disabled = true;
             
-            // 重新初始化Kepler.gl
+            // 重新初始化
             initializeKeplerGl();
             
-            updateLoadingState(true, 'Ready to process your data', 'Upload your express_parcel.csv file to start visualization');
+            updateLoadingState(true, 'Ready for new data', 'Upload CSV file to start visualization');
             document.querySelectorAll('.error-message, .success-message').forEach(el => el.remove());
         }
         
         // 页面初始化
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM loaded, waiting for libraries...');
+        document.addEventListener('DOMContentLoaded', async function() {
+            console.log('DOM loaded, initializing application...');
             
-            // 等待所有脚本加载完成，增加等待时间
-            setTimeout(() => {
-                console.log('Attempting to initialize...');
-                checkLibrariesLoaded(); // 先检查状态
+            // 初始化Kepler.gl
+            const initialized = await initializeKeplerGl();
+            
+            if (initialized) {
+                console.log('Application initialized successfully');
                 
-                if (initializeKeplerGl()) {
-                    console.log('Kepler.gl initialized successfully');
-                    
-                    // 设置事件监听器
-                    document.getElementById('fileInput').addEventListener('change', handleFileSelect);
-                    
-                    const uploadArea = document.getElementById('uploadArea');
-                    uploadArea.addEventListener('dragover', handleDragOver);
-                    uploadArea.addEventListener('dragleave', handleDragLeave);
-                    uploadArea.addEventListener('drop', handleFileDrop);
-                    uploadArea.addEventListener('click', triggerFileUpload);
-                    
-                    updateLoadingState(true, 'Ready to process your data', 'Upload your express_parcel.csv file to start visualization');
-                } else {
-                    console.error('Failed to initialize Kepler.gl');
-                    // 尝试重新加载
-                    setTimeout(() => {
-                        console.log('Retrying initialization...');
-                        if (initializeKeplerGl()) {
-                            console.log('Retry successful');
-                            location.reload(); // 如果成功，刷新页面以重新设置事件
-                        } else {
-                            showError('Failed to initialize Kepler.gl. Please refresh the page or check your internet connection.');
-                        }
-                    }, 2000);
-                }
-            }, 3000); // 增加到3秒等待时间
-        });
-        
-        // 窗口大小变化处理
-        window.addEventListener('resize', function() {
-            if (keplerGlApp) {
-                // 重新渲染以适应新尺寸
-                const mapContainer = document.getElementById('mapContainer');
-                if (mapContainer.children.length > 0) {
-                    resetVisualization();
-                }
+                // 设置事件监听器
+                document.getElementById('fileInput').addEventListener('change', handleFileSelect);
+                
+                const uploadArea = document.getElementById('uploadArea');
+                uploadArea.addEventListener('dragover', handleDragOver);
+                uploadArea.addEventListener('dragleave', handleDragLeave);
+                uploadArea.addEventListener('drop', handleFileDrop);
+                uploadArea.addEventListener('click', triggerFileUpload);
+                
+                updateLoadingState(true, 'Ready for data upload', 'Upload your express_parcel.csv file to start visualization');
+            } else {
+                updateLoadingState(false);
+                showError('Failed to initialize application. Please refresh the page.');
             }
         });
         
         // 全局错误处理
         window.addEventListener('error', function(e) {
             console.error('Global error:', e);
-            showError('An unexpected error occurred. Please try refreshing the page.');
+            updateLibraryStatus('error', 'Unexpected error occurred');
+        });
+        
+        // 窗口大小变化处理
+        window.addEventListener('resize', function() {
+            if (store) {
+                // 可以在这里添加响应式处理逻辑
+                console.log('Window resized, map should auto-adjust');
+            }
         });
     </script>
 </body>
