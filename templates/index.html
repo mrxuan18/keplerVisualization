@@ -5,15 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Express Parcel Visualization - Flask + Kepler.gl</title>
     
-    <!-- 官方推荐的UMD依赖加载 -->
-    <script src="https://unpkg.com/react@16/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@16/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/redux@3.7.2/dist/redux.js"></script>
-    <script src="https://unpkg.com/react-redux@5.1.1/dist/react-redux.min.js"></script>
-    <script src="https://unpkg.com/styled-components@4.1.3/dist/styled-components.min.js"></script>
+    <!-- 官方推荐的UMD依赖加载 - 使用稳定版本 -->
+    <script crossorigin src="https://unpkg.com/react@16/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@16/umd/react-dom.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/redux@3.7.2/dist/redux.js"></script>
+    <script crossorigin src="https://unpkg.com/react-redux@5.1.1/dist/react-redux.min.js"></script>
+    <script crossorigin src="https://unpkg.com/styled-components@4.1.3/dist/styled-components.min.js"></script>
     
-    <!-- Kepler.gl 官方UMD包 -->
-    <script src="https://unpkg.com/kepler.gl@2.5.5/umd/keplergl.min.js"></script>
+    <!-- Kepler.gl 官方UMD包 - 使用最新稳定版本 -->
+    <script crossorigin src="https://unpkg.com/kepler.gl@2.5.5/umd/keplergl.min.js"></script>
     
     <style>
         * {
@@ -322,62 +322,98 @@
         
         // 检查依赖库是否加载完成
         function checkLibrariesLoaded() {
+            console.log('Checking libraries...');
+            console.log('React:', typeof React);
+            console.log('ReactDOM:', typeof ReactDOM);
+            console.log('Redux:', typeof Redux);
+            console.log('ReactRedux:', typeof ReactRedux);
+            console.log('KeplerGl:', typeof KeplerGl);
+            console.log('window.KeplerGl:', typeof window.KeplerGl);
+            
             const libraries = {
                 React: typeof React !== 'undefined',
                 ReactDOM: typeof ReactDOM !== 'undefined',
                 Redux: typeof Redux !== 'undefined',
                 ReactRedux: typeof ReactRedux !== 'undefined',
-                KeplerGl: typeof KeplerGl !== 'undefined'
+                KeplerGl: typeof KeplerGl !== 'undefined' || typeof window.KeplerGl !== 'undefined'
             };
             
             const allLoaded = Object.values(libraries).every(Boolean);
             
             if (allLoaded) {
                 document.getElementById('libraryStatus').innerHTML = '✅ All libraries loaded successfully';
+                document.getElementById('libraryStatus').style.background = 'rgba(72, 187, 120, 0.1)';
+                document.getElementById('libraryStatus').style.borderColor = '#48bb78';
+                document.getElementById('libraryStatus').style.color = '#2f855a';
                 return true;
             } else {
                 const failed = Object.entries(libraries)
                     .filter(([_, loaded]) => !loaded)
                     .map(([name]) => name);
                 document.getElementById('libraryStatus').innerHTML = `❌ Missing: ${failed.join(', ')}`;
+                document.getElementById('libraryStatus').style.background = 'rgba(245, 101, 101, 0.1)';
+                document.getElementById('libraryStatus').style.borderColor = '#f56565';
+                document.getElementById('libraryStatus').style.color = '#c53030';
                 return false;
             }
         }
         
         // 初始化Kepler.gl应用
         function initializeKeplerGl() {
+            console.log('Initializing Kepler.gl...');
+            
             if (!checkLibrariesLoaded()) {
                 console.error('Libraries not fully loaded');
                 return false;
             }
             
-            // 创建Redux store
-            const reducers = Redux.combineReducers({
-                keplerGl: KeplerGl.keplerGlReducer
-            });
-            
-            const store = Redux.createStore(reducers, {});
-            
-            // 创建Kepler.gl组件
-            const KeplerElement = React.createElement(
-                ReactRedux.Provider,
-                { store },
-                React.createElement(KeplerGl.default, {
-                    id: "map",
-                    mapboxApiAccessToken: MAPBOX_TOKEN,
-                    width: window.innerWidth,
-                    height: window.innerHeight - 200
-                })
-            );
-            
-            // 渲染到容器
-            const mapContainer = document.getElementById('mapContainer');
-            ReactDOM.render(KeplerElement, mapContainer);
-            
-            // 保存store引用以便后续使用
-            keplerGlApp = { store, mapId: "map" };
-            
-            return true;
+            try {
+                // 确保KeplerGl可用
+                const KeplerComponent = KeplerGl || window.KeplerGl;
+                if (!KeplerComponent) {
+                    throw new Error('KeplerGl component not found');
+                }
+                
+                console.log('KeplerGl found:', KeplerComponent);
+                
+                // 创建Redux store
+                const reducers = Redux.combineReducers({
+                    keplerGl: KeplerComponent.keplerGlReducer
+                });
+                
+                const store = Redux.createStore(reducers, {});
+                console.log('Redux store created');
+                
+                // 创建Kepler.gl组件
+                const KeplerElement = React.createElement(
+                    ReactRedux.Provider,
+                    { store },
+                    React.createElement(KeplerComponent.default || KeplerComponent, {
+                        id: "map",
+                        mapboxApiAccessToken: MAPBOX_TOKEN,
+                        width: window.innerWidth,
+                        height: window.innerHeight - 200
+                    })
+                );
+                
+                console.log('Kepler element created');
+                
+                // 渲染到容器
+                const mapContainer = document.getElementById('mapContainer');
+                ReactDOM.render(KeplerElement, mapContainer);
+                
+                console.log('Kepler.gl rendered to container');
+                
+                // 保存store引用以便后续使用
+                keplerGlApp = { store, mapId: "map", KeplerComponent };
+                
+                return true;
+                
+            } catch (error) {
+                console.error('Failed to initialize Kepler.gl:', error);
+                showError('Failed to initialize Kepler.gl: ' + error.message);
+                return false;
+            }
         }
         
         // 添加数据到地图
@@ -620,8 +656,13 @@
         
         // 页面初始化
         document.addEventListener('DOMContentLoaded', function() {
-            // 等待所有脚本加载完成
+            console.log('DOM loaded, waiting for libraries...');
+            
+            // 等待所有脚本加载完成，增加等待时间
             setTimeout(() => {
+                console.log('Attempting to initialize...');
+                checkLibrariesLoaded(); // 先检查状态
+                
                 if (initializeKeplerGl()) {
                     console.log('Kepler.gl initialized successfully');
                     
@@ -636,9 +677,19 @@
                     
                     updateLoadingState(true, 'Ready to process your data', 'Upload your express_parcel.csv file to start visualization');
                 } else {
-                    showError('Failed to initialize Kepler.gl. Please refresh the page.');
+                    console.error('Failed to initialize Kepler.gl');
+                    // 尝试重新加载
+                    setTimeout(() => {
+                        console.log('Retrying initialization...');
+                        if (initializeKeplerGl()) {
+                            console.log('Retry successful');
+                            location.reload(); // 如果成功，刷新页面以重新设置事件
+                        } else {
+                            showError('Failed to initialize Kepler.gl. Please refresh the page or check your internet connection.');
+                        }
+                    }, 2000);
                 }
-            }, 1000);
+            }, 3000); // 增加到3秒等待时间
         });
         
         // 窗口大小变化处理
