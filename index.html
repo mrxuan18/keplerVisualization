@@ -3,603 +3,916 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Practical Geocoding for Express Parcel Data</title>
+    <title>Express Parcel Visualization - Simple Test</title>
+    <script src="https://unpkg.com/kepler.gl@3.0.0/umd/keplergl.min.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/redux@4.2.1/dist/redux.min.js"></script>
+    <script src="https://unpkg.com/react-redux@8.1.2/dist/react-redux.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 20px;
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        .container {
-            background: white;
-            padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-        }
-        h1 {
-            color: #2c3e50;
-            text-align: center;
-            margin-bottom: 30px;
-            font-size: 2.5em;
-        }
-        .solution-tabs {
-            display: flex;
-            margin-bottom: 20px;
-            border-bottom: 2px solid #e9ecef;
-        }
-        .tab {
-            padding: 12px 24px;
-            background: #f8f9fa;
-            border: none;
-            cursor: pointer;
-            font-weight: bold;
-            border-radius: 10px 10px 0 0;
-            margin-right: 5px;
-        }
-        .tab.active {
-            background: #007bff;
-            color: white;
-        }
-        .tab-content {
-            display: none;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 0 10px 10px 10px;
-            min-height: 400px;
-        }
-        .tab-content.active {
-            display: block;
-        }
-        .step {
-            margin: 20px 0;
-            padding: 20px;
-            background: white;
-            border-left: 5px solid #007bff;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-        }
-        .step h3 {
-            margin-top: 0;
-            color: #495057;
-        }
-        button {
-            background: linear-gradient(45deg, #007bff, #0056b3);
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 16px;
-            margin: 10px 5px;
-            transition: all 0.3s ease;
-        }
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0,123,255,0.3);
-        }
-        button:disabled {
-            background: #6c757d;
-            cursor: not-allowed;
-            transform: none;
-        }
-        .output {
-            background: #2d3748;
-            color: #e2e8f0;
-            border-radius: 8px;
-            padding: 15px;
-            margin: 10px 0;
-            max-height: 300px;
-            overflow-y: auto;
-            font-family: 'Courier New', monospace;
-            font-size: 13px;
-        }
-        .success { color: #48bb78; font-weight: bold; }
-        .error { color: #f56565; font-weight: bold; }
-        .warning { color: #ed8936; font-weight: bold; }
-        .info { color: #4299e1; font-weight: bold; }
         
-        .sample-addresses {
-            background: #fff5f5;
-            border: 2px solid #fed7d7;
-            border-radius: 8px;
-            padding: 20px;
-            margin: 20px 0;
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
         }
-        .address-item {
-            background: white;
-            padding: 10px;
-            margin: 5px 0;
-            border-radius: 5px;
-            font-family: monospace;
-            border-left: 4px solid #007bff;
-        }
-        .enhanced-csv {
-            background: #f0fff4;
-            border: 2px solid #9ae6b4;
-            border-radius: 8px;
-            padding: 20px;
-            margin: 20px 0;
-        }
-        textarea {
-            width: 100%;
-            height: 200px;
-            font-family: monospace;
-            font-size: 12px;
-            padding: 15px;
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
-            resize: vertical;
-        }
-        .coord-display {
+        
+        .container {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 15px;
-            margin: 20px 0;
+            grid-template-rows: auto 1fr;
+            height: 100vh;
         }
-        .coord-card {
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            border: 2px solid #e2e8f0;
+        
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(15px);
+            padding: 1.5rem 2rem;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            border-bottom: 3px solid #667eea;
+        }
+        
+        .header h1 {
+            color: #2d3748;
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .header p {
+            color: #718096;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+        
+        .upload-section {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .upload-area {
+            flex: 1;
+            min-width: 300px;
+            border: 2px dashed #cbd5e0;
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            cursor: pointer;
             transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.8);
         }
-        .coord-card:hover {
-            border-color: #007bff;
+        
+        .upload-area:hover {
+            border-color: #667eea;
+            background: rgba(255, 255, 255, 0.95);
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
         }
-        .coord-card.success {
-            border-color: #48bb78;
-            background: #f0fff4;
+        
+        .upload-area.dragover {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.1);
         }
-        .coord-card.failed {
-            border-color: #f56565;
-            background: #fff5f5;
+        
+        .upload-icon {
+            font-size: 2rem;
+            color: #667eea;
+            margin-bottom: 0.5rem;
         }
-        .coords {
-            font-family: monospace;
-            font-weight: bold;
-            color: #007bff;
-            font-size: 1.1em;
-        }
-        .api-selector {
-            background: #fffbeb;
-            border: 2px solid #fbbf24;
+        
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
             border-radius: 8px;
-            padding: 20px;
-            margin: 20px 0;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
         }
-        .api-option {
-            margin: 10px 0;
-            padding: 10px;
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        }
+        
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.9);
+            color: #4a5568;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .stats {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .stat-item {
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            color: #2d3748;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        
+        .main-content {
+            position: relative;
             background: white;
-            border-radius: 5px;
-        }
-        .progress-container {
-            background: #e2e8f0;
-            border-radius: 10px;
-            height: 20px;
-            margin: 10px 0;
             overflow: hidden;
         }
+        
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(5px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 0.3s ease;
+        }
+        
+        .loading-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid #e2e8f0;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            color: #4a5568;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+        }
+        
+        .loading-details {
+            color: #718096;
+            font-size: 0.9rem;
+            text-align: center;
+            max-width: 400px;
+        }
+        
         .progress-bar {
+            width: 300px;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+        
+        .progress-fill {
             height: 100%;
-            background: linear-gradient(45deg, #007bff, #0056b3);
-            width: 0%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            border-radius: 4px;
             transition: width 0.3s ease;
-            border-radius: 10px;
+        }
+        
+        .map-container {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .error-message {
+            background: rgba(245, 101, 101, 0.1);
+            border: 1px solid #f56565;
+            color: #c53030;
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .success-message {
+            background: rgba(72, 187, 120, 0.1);
+            border: 1px solid #48bb78;
+            color: #2f855a;
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .sample-hint {
+            background: rgba(102, 126, 234, 0.1);
+            border: 1px solid #667eea;
+            color: #4c51bf;
+            padding: 0.75rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            margin-top: 0.5rem;
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🗺️ Practical Geocoding Solution</h1>
-        
-        <div class="solution-tabs">
-            <button class="tab active" onclick="showTab('manual')">Manual Geocoding</button>
-            <button class="tab" onclick="showTab('automated')">Automated Processing</button>
-            <button class="tab" onclick="showTab('integration')">Kepler Integration</button>
-        </div>
-        
-        <!-- Manual Geocoding Tab -->
-        <div id="manual" class="tab-content active">
-            <div class="step">
-                <h3>🎯 Your Sample Addresses</h3>
-                <p>Let's start by manually geocoding your specific addresses. Since they lack city/state info, we'll need to enhance them.</p>
-                
-                <div class="sample-addresses">
-                    <h4>Original Addresses:</h4>
-                    <div class="address-item">1964 N West St</div>
-                    <div class="address-item">28325 N Dearborn Crossing Ln</div>
-                    <div class="address-item">1475 e hwy 80</div>
-                    <div class="address-item">1265 New Light Rd</div>
-                    <div class="address-item">710 N 2nd Street</div>
+        <header class="header">
+            <h1>📦 Express Parcel Visualization Test</h1>
+            <p>Upload your express_parcel.csv file to see real-time logistics visualization</p>
+            
+            <div class="upload-section">
+                <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+                    <div class="upload-icon">📤</div>
+                    <div><strong>Drop CSV file here or click to browse</strong></div>
+                    <div style="font-size: 0.8rem; color: #718096; margin-top: 0.5rem;">
+                        Supports express_parcel.csv format
+                    </div>
                 </div>
                 
-                <button onclick="manualGeocode()" id="manualBtn">Enhance & Geocode Addresses</button>
-                <div id="manualResults" class="coord-display"></div>
-            </div>
-        </div>
-        
-        <!-- Automated Processing Tab -->
-        <div id="automated" class="tab-content">
-            <div class="api-selector">
-                <h4>🔧 Choose Your Geocoding Strategy:</h4>
-                <div class="api-option">
-                    <label>
-                        <input type="radio" name="geocodeMethod" value="demo" checked>
-                        <strong>Demo Mode</strong> - Use sample coordinates for immediate testing
-                    </label>
-                </div>
-                <div class="api-option">
-                    <label>
-                        <input type="radio" name="geocodeMethod" value="mapbox">
-                        <strong>Mapbox API</strong> - High accuracy, 100K free requests/month
-                        <br><small>Requires free account at <a href="https://mapbox.com" target="_blank">mapbox.com</a></small>
-                    </label>
-                    <input type="text" id="mapboxKey" placeholder="Enter Mapbox Access Token" style="width: 100%; margin-top: 5px;">
-                </div>
-                <div class="api-option">
-                    <label>
-                        <input type="radio" name="geocodeMethod" value="google">
-                        <strong>Google Maps API</strong> - Highest accuracy, 28.5K free requests/month
-                        <br><small>Requires API key from <a href="https://console.cloud.google.com" target="_blank">Google Cloud Console</a></small>
-                    </label>
-                    <input type="text" id="googleKey" placeholder="Enter Google API Key" style="width: 100%; margin-top: 5px;">
+                <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                    <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()" id="uploadBtn">
+                        📁 Select File
+                    </button>
+                    <button class="btn btn-secondary" onclick="downloadSample()" id="sampleBtn">
+                        📄 Sample CSV
+                    </button>
+                    <button class="btn btn-secondary" onclick="resetVisualization()" id="resetBtn" disabled>
+                        🔄 Reset
+                    </button>
                 </div>
             </div>
             
-            <div class="step">
-                <h3>⚡ Process Express Parcel Data</h3>
-                <p>This will extract unique addresses from your CSV and geocode them automatically.</p>
-                <button onclick="processAutomated()" id="automatedBtn">Start Automated Processing</button>
-                <div class="progress-container" id="progressContainer" style="display: none;">
-                    <div class="progress-bar" id="progressBar"></div>
+            <div class="stats" id="statsContainer" style="display: none;">
+                <div class="stat-item">
+                    <span id="totalRecords">0</span> Records
                 </div>
-                <div id="progressText"></div>
-                <div id="automatedLog" class="output"></div>
-            </div>
-        </div>
-        
-        <!-- Kepler Integration Tab -->
-        <div id="integration" class="tab-content">
-            <div class="enhanced-csv">
-                <h3>📁 Enhanced CSV for Kepler.gl</h3>
-                <p>Your processed data with real coordinates, ready for Kepler.gl visualization:</p>
-                <button onclick="downloadEnhancedCSV()" id="downloadEnhancedBtn" disabled>Download Enhanced CSV</button>
-                <button onclick="copyEnhancedCSV()" id="copyEnhancedBtn" disabled>Copy to Clipboard</button>
-                <textarea id="enhancedCSVOutput" placeholder="Enhanced CSV data will appear here after processing..."></textarea>
+                <div class="stat-item">
+                    <span id="warehouseCount">0</span> Warehouses
+                </div>
+                <div class="stat-item">
+                    <span id="routeCount">0</span> Routes
+                </div>
+                <div class="stat-item">
+                    Processing Time: <span id="processingTime">0</span>s
+                </div>
             </div>
             
-            <div class="step">
-                <h3>🎨 Kepler.gl Configuration Guide</h3>
-                <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
-                    <h4>Step-by-Step Setup:</h4>
-                    <ol>
-                        <li><strong>Go to kepler.gl:</strong> Open <a href="https://kepler.gl" target="_blank">kepler.gl</a> in a new tab</li>
-                        <li><strong>Upload CSV:</strong> Click "Add Data" and upload your enhanced CSV file</li>
-                        <li><strong>Configure Arc Layer:</strong>
-                            <ul>
-                                <li>Layer Type: Arc</li>
-                                <li>Source Lat: <code>origin_lat</code></li>
-                                <li>Source Lng: <code>origin_lng</code></li>
-                                <li>Target Lat: <code>destination_lat</code></li>
-                                <li>Target Lng: <code>destination_lng</code></li>
-                            </ul>
-                        </li>
-                        <li><strong>Customize Appearance:</strong>
-                            <ul>
-                                <li>Color by: <code>primary_carrier</code> or <code>flow_size</code></li>
-                                <li>Thickness by: <code>shipment_count</code></li>
-                                <li>Add filters for carriers and platforms</li>
-                            </ul>
-                        </li>
-                    </ol>
-                    
-                    <h4>🎯 Expected Results:</h4>
-                    <ul>
-                        <li>Interactive arc lines showing shipment flows between exact addresses</li>
-                        <li>Line thickness representing shipment volume</li>
-                        <li>Color coding by carrier (USPS, FedEx, etc.)</li>
-                        <li>Filterable by platform, date, and flow size</li>
-                        <li>Precise geographic accuracy for operational insights</li>
-                    </ul>
+            <input type="file" id="fileInput" accept=".csv" style="display: none;">
+        </header>
+
+        <main class="main-content">
+            <div class="loading-overlay" id="loadingOverlay">
+                <div class="loading-spinner"></div>
+                <div class="loading-text" id="loadingText">Ready to process your data</div>
+                <div class="loading-details" id="loadingDetails">
+                    Upload your express_parcel.csv file to start visualization
+                </div>
+                <div class="progress-bar" id="progressBar" style="display: none;">
+                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
                 </div>
             </div>
-        </div>
+            
+            <div class="map-container" id="mapContainer"></div>
+        </main>
     </div>
 
     <script>
-        let enhancedData = [];
-        let processedCSV = '';
+        // Warehouse zipcode mapping
+        const WAREHOUSE_MAPPING = {
+            'NJ9': { zipcode: '07114', name: 'Newark, NJ', color: '#FF6B6B' },
+            'NJ8': { zipcode: '07201', name: 'Elizabeth, NJ', color: '#4ECDC4' },
+            'NJ7': { zipcode: '08817', name: 'Edison, NJ', color: '#45B7D1' },
+            'NJ-Main': { zipcode: '07306', name: 'Jersey City, NJ', color: '#96CEB4' },
+            'TX8828': { zipcode: '75261', name: 'Dallas, TX', color: '#FFEAA7' },
+            'TX8829': { zipcode: '76155', name: 'Fort Worth, TX', color: '#DDA0DD' },
+            'TX-DFW': { zipcode: '75063', name: 'Irving, TX', color: '#98D8C8' },
+            'CA-LA': { zipcode: '90058', name: 'Los Angeles, CA', color: '#F7DC6F' },
+            'CA-SF': { zipcode: '94080', name: 'South San Francisco, CA', color: '#BB8FCE' },
+            'WNT485': { zipcode: '90248', name: 'Gardena, CA', color: '#85C1E9' },
+            'WNT486': { zipcode: '91761', name: 'Ontario, CA', color: '#F8C471' },
+            'WNT487': { zipcode: '92408', name: 'San Bernardino, CA', color: '#82E0AA' },
+            'IL-CHI': { zipcode: '60638', name: 'Chicago, IL', color: '#D7BDE2' },
+            'IL9': { zipcode: '60106', name: 'Bensenville, IL', color: '#A9DFBF' },
+            'GA-ATL': { zipcode: '30349', name: 'Atlanta, GA', color: '#F9E79F' },
+            'FL-MIA': { zipcode: '33166', name: 'Miami, FL', color: '#AED6F1' },
+            'Unknown': { zipcode: '07114', name: 'Unknown Location', color: '#BDC3C7' }
+        };
 
-        function showTab(tabName) {
-            // Hide all tab contents
-            document.querySelectorAll('.tab-content').forEach(content => {
-                content.classList.remove('active');
-            });
-            document.querySelectorAll('.tab').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            
-            // Show selected tab
-            document.getElementById(tabName).classList.add('active');
-            event.target.classList.add('active');
+        // Global variables
+        let coordinateCache = {};
+        let processedData = null;
+        let startTime = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            setupEventListeners();
+        });
+
+        function setupEventListeners() {
+            const fileInput = document.getElementById('fileInput');
+            const uploadArea = document.getElementById('uploadArea');
+
+            // File input change
+            fileInput.addEventListener('change', handleFileSelect);
+
+            // Drag and drop
+            uploadArea.addEventListener('dragover', handleDragOver);
+            uploadArea.addEventListener('dragleave', handleDragLeave);
+            uploadArea.addEventListener('drop', handleFileDrop);
         }
 
-        function log(message, type = 'info', targetId = 'automatedLog') {
-            const logDiv = document.getElementById(targetId);
-            const timestamp = new Date().toLocaleTimeString();
-            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : type === 'warning' ? 'warning' : 'info';
-            logDiv.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
-            logDiv.scrollTop = logDiv.scrollHeight;
+        function handleDragOver(e) {
+            e.preventDefault();
+            document.getElementById('uploadArea').classList.add('dragover');
         }
 
-        function updateProgress(current, total, text) {
-            const progressBar = document.getElementById('progressBar');
-            const progressText = document.getElementById('progressText');
-            const progressContainer = document.getElementById('progressContainer');
+        function handleDragLeave() {
+            document.getElementById('uploadArea').classList.remove('dragover');
+        }
+
+        function handleFileDrop(e) {
+            e.preventDefault();
+            document.getElementById('uploadArea').classList.remove('dragover');
             
-            if (total > 0) {
-                progressContainer.style.display = 'block';
-                const percentage = (current / total) * 100;
-                progressBar.style.width = percentage + '%';
-                progressText.textContent = text || `${current}/${total} addresses processed (${percentage.toFixed(1)}%)`;
-            } else {
-                progressContainer.style.display = 'none';
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                processFile(files[0]);
             }
         }
 
-        async function manualGeocode() {
-            const btn = document.getElementById('manualBtn');
-            btn.disabled = true;
-            btn.textContent = 'Processing...';
-            
-            // Enhanced addresses with likely city/state based on common patterns
-            const enhancedAddresses = [
-                { original: "1964 N West St", enhanced: "1964 N West St, Phoenix, AZ", coords: { lat: 33.4626, lng: -112.1251 } },
-                { original: "28325 N Dearborn Crossing Ln", enhanced: "28325 N Dearborn Crossing Ln, Cave Creek, AZ", coords: { lat: 33.8339, lng: -111.9543 } },
-                { original: "1475 e hwy 80", enhanced: "1475 E Highway 80, Douglas, AZ", coords: { lat: 31.3446, lng: -109.5451 } },
-                { original: "1265 New Light Rd", enhanced: "1265 New Light Rd, Wake Forest, NC", coords: { lat: 35.9598, lng: -78.5097 } },
-                { original: "710 N 2nd Street", enhanced: "710 N 2nd Street, Phoenix, AZ", coords: { lat: 33.4594, lng: -112.0719 } }
-            ];
-
-            const resultsDiv = document.getElementById('manualResults');
-            resultsDiv.innerHTML = '';
-
-            enhancedAddresses.forEach((addr, index) => {
-                setTimeout(() => {
-                    const cardClass = 'coord-card success';
-                    resultsDiv.innerHTML += `
-                        <div class="${cardClass}">
-                            <strong>Original:</strong> ${addr.original}<br>
-                            <strong>Enhanced:</strong> ${addr.enhanced}<br>
-                            <div class="coords">📍 ${addr.coords.lat.toFixed(6)}, ${addr.coords.lng.toFixed(6)}</div>
-                            <small style="color: #666;">Status: Enhanced with likely location</small>
-                        </div>
-                    `;
-                }, index * 500);
-            });
-
-            setTimeout(() => {
-                btn.disabled = false;
-                btn.textContent = 'Enhance & Geocode Addresses';
-                
-                // Store sample data for integration
-                enhancedData = enhancedAddresses.map((addr, i) => ({
-                    origin_lat: addr.coords.lat.toFixed(6),
-                    origin_lng: addr.coords.lng.toFixed(6),
-                    origin_address: addr.enhanced,
-                    destination_lat: enhancedAddresses[(i + 1) % enhancedAddresses.length].coords.lat.toFixed(6),
-                    destination_lng: enhancedAddresses[(i + 1) % enhancedAddresses.length].coords.lng.toFixed(6),
-                    destination_address: enhancedAddresses[(i + 1) % enhancedAddresses.length].enhanced,
-                    shipment_count: Math.floor(Math.random() * 50) + 10,
-                    total_weight: (Math.random() * 100).toFixed(2),
-                    total_packages: Math.floor(Math.random() * 20) + 1,
-                    primary_carrier: ['USPS', 'FedEx', 'UPS'][Math.floor(Math.random() * 3)],
-                    primary_platform: ['temuErp', 'Offline', 'Amazon'][Math.floor(Math.random() * 3)],
-                    flow_size: ['High', 'Medium', 'Low'][Math.floor(Math.random() * 3)]
-                }));
-                
-                generateCSV();
-            }, enhancedAddresses.length * 500 + 500);
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) {
+                processFile(file);
+            }
         }
 
-        async function processAutomated() {
-            const btn = document.getElementById('automatedBtn');
-            btn.disabled = true;
-            btn.textContent = 'Processing...';
-            
-            const method = document.querySelector('input[name="geocodeMethod"]:checked').value;
-            
+        async function processFile(file) {
+            if (!file.name.toLowerCase().endsWith('.csv')) {
+                showError('Please upload a CSV file');
+                return;
+            }
+
+            startTime = Date.now();
+            updateLoadingState(true, 'Reading CSV file...', 'Parsing data structure...');
+            updateProgress(10);
+
             try {
-                log('🚀 Starting automated processing...', 'info');
+                const csvContent = await readFileAsText(file);
+                updateProgress(20);
                 
-                // Read express parcel data
-                log('📖 Reading express_parcel.csv...', 'info');
-                const data = await window.fs.readFile('express_parcel.csv', { encoding: 'utf8' });
-                
-                // Simple CSV parsing
-                const lines = data.split('\n');
-                const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-                const rows = lines.slice(1).filter(line => line.trim()).map(line => {
-                    const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
-                    const row = {};
-                    headers.forEach((header, index) => {
-                        row[header] = values[index] || '';
-                    });
-                    return row;
+                updateLoadingState(true, 'Parsing CSV data...', 'Processing shipment records...');
+                const parsedData = Papa.parse(csvContent, {
+                    header: true,
+                    dynamicTyping: true,
+                    skipEmptyLines: true
                 });
 
-                log(`✅ Loaded ${rows.length} records`, 'success');
-
-                // Extract unique addresses
-                log('🔍 Extracting unique addresses...', 'info');
-                const addressSet = new Set();
-                
-                rows.forEach(row => {
-                    if (row.shipper_address_line_one && row.shipper_city && row.shipper_province_code) {
-                        const shipperAddr = `${row.shipper_address_line_one}, ${row.shipper_city}, ${row.shipper_province_code}`;
-                        addressSet.add(shipperAddr);
-                    }
-                    if (row.shipto_address_line_one && row.shipto_city && row.shipto_province_code) {
-                        const shiptoAddr = `${row.shipto_address_line_one}, ${row.shipto_city}, ${row.shipto_province_code}`;
-                        addressSet.add(shiptoAddr);
-                    }
-                });
-
-                const uniqueAddresses = Array.from(addressSet).slice(0, 50); // Limit for demo
-                log(`📍 Found ${addressSet.size} unique addresses, processing first ${uniqueAddresses.length}`, 'info');
-
-                let geocodedAddresses = new Map();
-
-                if (method === 'demo') {
-                    log('🎭 Using demo mode with sample coordinates...', 'info');
-                    
-                    // Generate demo coordinates for unique addresses
-                    uniqueAddresses.forEach((addr, index) => {
-                        updateProgress(index + 1, uniqueAddresses.length, `Demo geocoding: ${addr.substring(0, 30)}...`);
-                        
-                        // Generate realistic US coordinates
-                        const lat = 25 + Math.random() * 25; // 25-50°N
-                        const lng = -125 + Math.random() * 55; // -125 to -70°W
-                        
-                        geocodedAddresses.set(addr, {
-                            lat: lat,
-                            lng: lng,
-                            success: true
-                        });
-                    });
-                    
-                    log(`✅ Demo geocoding complete for ${uniqueAddresses.length} addresses`, 'success');
-                } else {
-                    // Real API geocoding would go here
-                    log('⚠️ Real API geocoding not implemented in this demo', 'warning');
-                    log('💡 To use real APIs, implement the geocoding functions with your API keys', 'info');
+                if (parsedData.errors.length > 0) {
+                    throw new Error('CSV parsing error: ' + parsedData.errors[0].message);
                 }
 
-                // Process the data with coordinates
-                log('🔄 Creating flow data with coordinates...', 'info');
-                const flowMap = new Map();
+                updateProgress(40);
+                updateLoadingState(true, 'Processing shipment data...', 
+                    `Processing first 500 records out of ${parsedData.data.length} total records...`);
 
-                rows.forEach(row => {
-                    if (!row.shipper_city || !row.shipto_city) return;
+                const validData = await processShipmentData(parsedData.data);
+                updateProgress(60);
 
-                    const shipperAddr = `${row.shipper_address_line_one}, ${row.shipper_city}, ${row.shipper_province_code}`;
-                    const shiptoAddr = `${row.shipto_address_line_one}, ${row.shipto_city}, ${row.shipto_province_code}`;
+                updateLoadingState(true, 'Getting location coordinates...', 'Fetching geographic data...');
+                await enrichWithCoordinates(validData);
+                updateProgress(80);
 
-                    const originCoords = geocodedAddresses.get(shipperAddr);
-                    const destCoords = geocodedAddresses.get(shiptoAddr);
+                updateLoadingState(true, 'Creating visualization...', 'Rendering Kepler.gl map...');
+                await createVisualization(validData);
+                updateProgress(100);
 
-                    if (originCoords && destCoords && originCoords.success && destCoords.success) {
-                        const flowKey = `${shipperAddr}→${shiptoAddr}`;
-
-                        if (!flowMap.has(flowKey)) {
-                            flowMap.set(flowKey, {
-                                origin_lat: originCoords.lat,
-                                origin_lng: originCoords.lng,
-                                origin_address: shipperAddr,
-                                destination_lat: destCoords.lat,
-                                destination_lng: destCoords.lng,
-                                destination_address: shiptoAddr,
-                                shipment_count: 0,
-                                total_weight: 0,
-                                total_packages: 0,
-                                carriers: new Set(),
-                                platforms: new Set()
-                            });
-                        }
-
-                        const flow = flowMap.get(flowKey);
-                        flow.shipment_count++;
-                        flow.total_weight += parseFloat(row.gw) || 0;
-                        flow.total_packages += parseInt(row.pkg_num) || 1;
-                        flow.carriers.add(row.carrier || 'Unknown');
-                        flow.platforms.add(row.actual_platform || row.platform || 'Unknown');
-                    }
-                });
-
-                // Convert to final format
-                enhancedData = Array.from(flowMap.values()).map(flow => ({
-                    origin_lat: Number(flow.origin_lat.toFixed(6)),
-                    origin_lng: Number(flow.origin_lng.toFixed(6)),
-                    origin_address: flow.origin_address,
-                    destination_lat: Number(flow.destination_lat.toFixed(6)),
-                    destination_lng: Number(flow.destination_lng.toFixed(6)),
-                    destination_address: flow.destination_address,
-                    shipment_count: flow.shipment_count,
-                    total_weight: Number(flow.total_weight.toFixed(2)),
-                    total_packages: flow.total_packages,
-                    primary_carrier: Array.from(flow.carriers)[0],
-                    primary_platform: Array.from(flow.platforms)[0],
-                    flow_size: flow.shipment_count > 20 ? 'High' : flow.shipment_count > 5 ? 'Medium' : 'Low'
-                }));
-
-                log(`🎯 Generated ${enhancedData.length} flows with real coordinates`, 'success');
-                generateCSV();
+                const processingTime = ((Date.now() - startTime) / 1000).toFixed(1);
                 
+                // Store original total for stats
+                document.getElementById('statsContainer').dataset.originalTotal = parsedData.data.length;
+                updateStats(validData, processingTime);
+                
+                setTimeout(() => {
+                    updateLoadingState(false);
+                    const totalRecords = parsedData.data.length;
+                    const processedRecords = validData.length;
+                    
+                    if (totalRecords > 500) {
+                        showSuccess(`Successfully visualized ${processedRecords} routes (limited to first 500 records out of ${totalRecords} total for performance)`);
+                    } else {
+                        showSuccess(`Successfully visualized ${processedRecords} shipment routes!`);
+                    }
+                }, 500);
+
+                // Enable reset button
+                document.getElementById('resetBtn').disabled = false;
+
             } catch (error) {
-                log(`❌ Error: ${error.message}`, 'error');
-                console.error(error);
-            } finally {
-                btn.disabled = false;
-                btn.textContent = 'Start Automated Processing';
-                updateProgress(0, 0);
+                console.error('Processing error:', error);
+                updateLoadingState(false);
+                showError('Processing failed: ' + error.message);
             }
         }
 
-        function generateCSV() {
-            if (enhancedData.length === 0) return;
-            
-            const headers = Object.keys(enhancedData[0]).join(',');
-            const rows = enhancedData.map(row => 
-                Object.values(row).map(value => 
-                    typeof value === 'string' && value.includes(',') ? `"${value}"` : value
-                ).join(',')
-            );
-            
-            processedCSV = [headers, ...rows].join('\n');
-            
-            document.getElementById('enhancedCSVOutput').value = processedCSV;
-            document.getElementById('downloadEnhancedBtn').disabled = false;
-            document.getElementById('copyEnhancedBtn').disabled = false;
-            
-            log(`📄 CSV generated with ${enhancedData.length} flows`, 'success');
+        function readFileAsText(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.onerror = () => reject(new Error('File reading failed'));
+                reader.readAsText(file);
+            });
         }
 
-        function downloadEnhancedCSV() {
-            if (!processedCSV) return;
+        async function processShipmentData(rawData) {
+            const processed = [];
+            const totalRecords = rawData.length;
+            const limit = Math.min(totalRecords, 500); // Fixed limit to 500 records
             
-            const blob = new Blob([processedCSV], { type: 'text/csv' });
+            // Show user how many records we're processing
+            updateLoadingState(true, 'Processing shipment data...', 
+                `Processing ${limit} records (out of ${totalRecords} total)...`);
+
+            for (let i = 0; i < limit; i++) {
+                const row = rawData[i];
+                
+                try {
+                    // Parse date
+                    let shipmentDate = null;
+                    if (row.created_time) {
+                        const dateStr = String(row.created_time);
+                        if (dateStr.includes('/')) {
+                            const parts = dateStr.split(' ')[0].split('/');
+                            if (parts.length === 3) {
+                                const month = parts[0].padStart(2, '0');
+                                const day = parts[1].padStart(2, '0');
+                                const year = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+                                shipmentDate = `${year}-${month}-${day}`;
+                            }
+                        }
+                    }
+
+                    // Fix warehouse zipcode
+                    const warehouseInfo = getWarehouseInfo(row.warehouse_name);
+                    
+                    // Extract destination zipcode
+                    const destZipcode = extractZipcode(row.shipto_postal_code);
+
+                    if (warehouseInfo && destZipcode) {
+                        processed.push({
+                            id: row.id || i + 1,
+                            shipment_date: shipmentDate || '2024-03-15',
+                            warehouse_name: row.warehouse_name || 'Unknown',
+                            warehouse_zipcode: warehouseInfo.zipcode,
+                            warehouse_display: warehouseInfo.name,
+                            dest_zipcode: destZipcode,
+                            dest_city: row.shipto_city || 'Unknown',
+                            dest_state: row.shipto_state || '',
+                            carrier: row.carrier || 'Unknown',
+                            business_type: row.biz_type || 'Standard',
+                            weight_kg: parseFloat(row.gw) || 1,
+                            volume_m3: parseFloat(row.vol) || 0.1,
+                            packages: parseInt(row.pkg_num) || 1
+                        });
+                    }
+                } catch (e) {
+                    console.warn('Row processing error:', e);
+                }
+            }
+
+            return processed;
+        }
+
+        function getWarehouseInfo(warehouseName) {
+            if (!warehouseName) return WAREHOUSE_MAPPING['Unknown'];
+            
+            const name = String(warehouseName).trim();
+            
+            // Direct match
+            if (WAREHOUSE_MAPPING[name]) {
+                return WAREHOUSE_MAPPING[name];
+            }
+            
+            // Fuzzy matching
+            const nameUpper = name.toUpperCase();
+            
+            if (nameUpper.startsWith('NJ')) return WAREHOUSE_MAPPING['NJ9'];
+            if (nameUpper.startsWith('TX')) return WAREHOUSE_MAPPING['TX8828'];
+            if (nameUpper.startsWith('CA') || nameUpper.includes('LA')) return WAREHOUSE_MAPPING['CA-LA'];
+            if (nameUpper.startsWith('WNT')) return WAREHOUSE_MAPPING['WNT485'];
+            if (nameUpper.startsWith('IL') || nameUpper.includes('CHI')) return WAREHOUSE_MAPPING['IL-CHI'];
+            if (nameUpper.includes('NYC')) return WAREHOUSE_MAPPING['NJ-Main'];
+            
+            return WAREHOUSE_MAPPING['Unknown'];
+        }
+
+        function extractZipcode(zipcodeStr) {
+            if (!zipcodeStr) return null;
+            const zipcode = String(zipcodeStr).replace(/\D/g, '').substring(0, 5);
+            return zipcode.length === 5 ? zipcode : null;
+        }
+
+        async function enrichWithCoordinates(data) {
+            const uniqueZipcodes = [...new Set([
+                ...data.map(d => d.warehouse_zipcode),
+                ...data.map(d => d.dest_zipcode)
+            ])];
+
+            let processed = 0;
+            for (const zipcode of uniqueZipcodes) {
+                if (!coordinateCache[zipcode]) {
+                    try {
+                        const coord = await getCoordinates(zipcode);
+                        coordinateCache[zipcode] = coord;
+                        processed++;
+                        
+                        if (processed % 5 === 0) {
+                            updateLoadingState(true, 'Getting coordinates...', 
+                                `Processed ${processed}/${uniqueZipcodes.length} locations...`);
+                        }
+                        
+                        // Rate limiting
+                        await new Promise(resolve => setTimeout(resolve, 150));
+                    } catch (e) {
+                        coordinateCache[zipcode] = null;
+                    }
+                }
+            }
+
+            // Add coordinates to data
+            const enrichedData = data.filter(row => {
+                const warehouseCoord = coordinateCache[row.warehouse_zipcode];
+                const destCoord = coordinateCache[row.dest_zipcode];
+                
+                if (warehouseCoord && destCoord) {
+                    row.origin_lat = warehouseCoord.lat;
+                    row.origin_lng = warehouseCoord.lng;
+                    row.dest_lat = destCoord.lat;
+                    row.dest_lng = destCoord.lng;
+                    row.distance_km = calculateDistance(
+                        warehouseCoord.lat, warehouseCoord.lng,
+                        destCoord.lat, destCoord.lng
+                    );
+                    return true;
+                }
+                return false;
+            });
+
+            // Update original array
+            data.length = 0;
+            data.push(...enrichedData);
+        }
+
+        async function getCoordinates(zipcode) {
+            try {
+                const response = await fetch(`https://api.zippopotam.us/us/${zipcode}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.places && data.places.length > 0) {
+                        const place = data.places[0];
+                        return {
+                            lat: parseFloat(place.latitude),
+                            lng: parseFloat(place.longitude)
+                        };
+                    }
+                }
+                throw new Error(`No coordinates for ${zipcode}`);
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function calculateDistance(lat1, lng1, lat2, lng2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLng = (lng2 - lng1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                     Math.sin(dLng/2) * Math.sin(dLng/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return Math.round(R * c);
+        }
+
+        async function createVisualization(data) {
+            const mapConfig = {
+                version: 'v1',
+                config: {
+                    mapState: {
+                        latitude: 39.8,
+                        longitude: -98.0,
+                        zoom: 4,
+                        pitch: 20,
+                        bearing: 0
+                    },
+                    visState: {
+                        filters: [
+                            {
+                                dataId: ['shipments'],
+                                id: 'date_filter',
+                                name: ['shipment_date'],
+                                type: 'timeRange',
+                                enlarged: false
+                            }
+                        ],
+                        layers: [
+                            {
+                                id: 'arc_layer',
+                                type: 'arc',
+                                config: {
+                                    dataId: 'shipments',
+                                    label: 'Shipping Routes',
+                                    color: [255, 0, 0],
+                                    columns: {
+                                        lat0: 'origin_lat',
+                                        lng0: 'origin_lng',
+                                        lat1: 'dest_lat',
+                                        lng1: 'dest_lng'
+                                    },
+                                    isVisible: true,
+                                    visConfig: {
+                                        opacity: 0.8,
+                                        thickness: 3,
+                                        colorRange: {
+                                            name: 'Global Warming',
+                                            type: 'sequential',
+                                            colors: ['#5A1846', '#900C3F', '#C70039', '#E3611C', '#F1920E', '#FFC300']
+                                        },
+                                        sizeRange: [1, 10],
+                                        targetColor: [255, 255, 255]
+                                    }
+                                }
+                            },
+                            {
+                                id: 'warehouse_points',
+                                type: 'point',
+                                config: {
+                                    dataId: 'shipments',
+                                    label: 'Warehouses',
+                                    color: [0, 255, 0],
+                                    columns: {
+                                        lat: 'origin_lat',
+                                        lng: 'origin_lng'
+                                    },
+                                    isVisible: true,
+                                    visConfig: {
+                                        opacity: 1,
+                                        radius: 25,
+                                        radiusRange: [15, 50],
+                                        outline: true,
+                                        colorRange: {
+                                            name: 'ColorBrewer Set1-9',
+                                            type: 'qualitative',
+                                            colors: ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#f781bf', '#999999']
+                                        }
+                                    }
+                                }
+                            },
+                            {
+                                id: 'destination_points',
+                                type: 'point',
+                                config: {
+                                    dataId: 'shipments',
+                                    label: 'Destinations',
+                                    color: [0, 100, 255],
+                                    columns: {
+                                        lat: 'dest_lat',
+                                        lng: 'dest_lng'
+                                    },
+                                    isVisible: true,
+                                    visConfig: {
+                                        opacity: 0.7,
+                                        radius: 8,
+                                        radiusRange: [3, 20],
+                                        outline: false
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            };
+
+            try {
+                const mapContainer = document.getElementById('mapContainer');
+                mapContainer.innerHTML = '';
+
+                // Create Kepler instance
+                const keplerElement = React.createElement(KeplerGl, {
+                    id: 'test-map',
+                    width: '100%',
+                    height: '100%',
+                    config: mapConfig.config
+                });
+
+                ReactDOM.render(keplerElement, mapContainer);
+
+                // Add data after a short delay
+                setTimeout(() => {
+                    // Add dataset directly to Kepler
+                    const datasets = [{
+                        info: {
+                            id: 'shipments',
+                            label: 'Express Parcel Shipments'
+                        },
+                        data: data
+                    }];
+
+                    // This is a simplified approach - in a real app you'd use proper Redux store
+                    if (window.keplerGl) {
+                        window.keplerGl.addDataToMap({
+                            datasets: datasets,
+                            config: mapConfig.config
+                        });
+                    }
+                }, 1000);
+
+                processedData = data;
+
+            } catch (error) {
+                console.error('Visualization creation failed:', error);
+                throw error;
+            }
+        }
+
+        function updateLoadingState(loading, message = '', details = '') {
+            const overlay = document.getElementById('loadingOverlay');
+            const text = document.getElementById('loadingText');
+            const detailsEl = document.getElementById('loadingDetails');
+            const progressBar = document.getElementById('progressBar');
+
+            if (loading) {
+                overlay.classList.remove('hidden');
+                if (message) text.textContent = message;
+                if (details) detailsEl.textContent = details;
+                progressBar.style.display = 'block';
+            } else {
+                overlay.classList.add('hidden');
+                progressBar.style.display = 'none';
+            }
+        }
+
+        function updateProgress(percent) {
+            document.getElementById('progressFill').style.width = percent + '%';
+        }
+
+        function updateStats(data, processingTime) {
+            const stats = document.getElementById('statsContainer');
+            const originalTotal = stats.dataset.originalTotal || data.length;
+            
+            document.getElementById('totalRecords').textContent = data.length;
+            document.getElementById('warehouseCount').textContent = new Set(data.map(d => d.warehouse_name)).size;
+            document.getElementById('routeCount').textContent = data.length;
+            document.getElementById('processingTime').textContent = processingTime;
+            
+            // Add a note if we limited the data
+            if (parseInt(originalTotal) > 500) {
+                const limitNote = document.createElement('div');
+                limitNote.className = 'stat-item';
+                limitNote.style.background = 'rgba(255, 193, 7, 0.2)';
+                limitNote.innerHTML = `Limited from ${originalTotal} total`;
+                stats.appendChild(limitNote);
+            }
+            
+            stats.style.display = 'flex';
+        }
+
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message fade-in';
+            errorDiv.innerHTML = `⚠️ ${message}`;
+            document.querySelector('.header').appendChild(errorDiv);
+            setTimeout(() => errorDiv.remove(), 5000);
+        }
+
+        function showSuccess(message) {
+            const successDiv = document.createElement('div');
+            successDiv.className = 'success-message fade-in';
+            successDiv.innerHTML = `✅ ${message}`;
+            document.querySelector('.header').appendChild(successDiv);
+            setTimeout(() => successDiv.remove(), 5000);
+        }
+
+        function downloadSample() {
+            const sampleData = `id,created_time,warehouse_name,shipto_postal_code,shipto_city,shipto_state,shipto_country_code,carrier,biz_type,gw,vol,pkg_num
+1,3/15/24 10:30,NJ9,10001,New York,NY,US,FedEx,Express,2.5,0.01,1
+2,3/15/24 11:45,TX8828,90210,Beverly Hills,CA,US,UPS,Standard,1.8,0.008,1
+3,3/15/24 14:20,CA-LA,60601,Chicago,IL,US,DHL,Express,3.2,0.015,2
+4,3/16/24 09:15,NJ8,33101,Miami,FL,US,FedEx,Standard,2.1,0.012,1
+5,3/16/24 16:30,WNT485,98101,Seattle,WA,US,UPS,Express,4.5,0.025,3
+6,3/17/24 08:45,IL-CHI,02101,Boston,MA,US,USPS,Standard,1.9,0.009,1
+7,3/17/24 13:20,TX8829,30301,Atlanta,GA,US,DHL,Express,3.8,0.018,2
+8,3/18/24 10:15,WNT486,75201,Dallas,TX,US,FedEx,Standard,2.7,0.013,1
+9,3/18/24 15:40,CA-SF,80202,Denver,CO,US,UPS,Express,5.2,0.028,4
+10,3/19/24 11:25,GA-ATL,85001,Phoenix,AZ,US,DHL,Standard,3.1,0.016,2
+11,3/19/24 14:50,NJ7,19101,Philadelphia,PA,US,FedEx,Express,2.3,0.011,1
+12,3/20/24 09:30,FL-MIA,37201,Nashville,TN,US,UPS,Standard,4.1,0.022,3
+13,3/20/24 16:15,IL9,55401,Minneapolis,MN,US,USPS,Express,1.6,0.007,1
+14,3/21/24 12:00,NJ9,97201,Portland,OR,US,DHL,Standard,3.5,0.017,2
+15,3/21/24 17:30,TX8828,63101,St. Louis,MO,US,FedEx,Express,2.9,0.014,1
+16,3/22/24 08:20,CA-LA,53201,Milwaukee,WI,US,UPS,Standard,4.7,0.024,3
+17,3/22/24 13:45,WNT485,84101,Salt Lake City,UT,US,DHL,Express,3.3,0.016,2
+18,3/23/24 10:10,NJ8,40201,Louisville,KY,US,USPS,Standard,2.0,0.010,1
+19,3/23/24 15:25,TX8829,23219,Richmond,VA,US,FedEx,Express,3.7,0.019,2
+20,3/24/24 11:40,IL-CHI,29201,Columbia,SC,US,UPS,Standard,2.4,0.012,1`;
+
+            const blob = new Blob([sampleData], { type: 'text/csv' });
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'express_parcel_enhanced_coordinates.csv';
+            a.download = 'sample_express_parcel.csv';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             window.URL.revokeObjectURL(url);
             
-            log('📁 Enhanced CSV downloaded successfully!', 'success');
+            showSuccess('Sample CSV downloaded! Upload it to see the visualization.');
         }
 
-        function copyEnhancedCSV() {
-            if (!processedCSV) return;
+        function resetVisualization() {
+            // Reset all states
+            processedData = null;
+            coordinateCache = {};
             
-            const textarea = document.getElementById('enhancedCSVOutput');
-            textarea.select();
-            document.execCommand('copy');
+            // Clear map
+            const mapContainer = document.getElementById('mapContainer');
+            mapContainer.innerHTML = '';
             
-            log('📋 CSV content copied to clipboard!', 'success');
+            // Reset UI
+            document.getElementById('fileInput').value = '';
+            document.getElementById('statsContainer').style.display = 'none';
+            document.getElementById('resetBtn').disabled = true;
+            
+            // Show initial loading state
+            updateLoadingState(true, 'Ready to process your data', 'Upload your express_parcel.csv file to start visualization');
+            
+            // Remove any messages
+            document.querySelectorAll('.error-message, .success-message').forEach(el => el.remove());
         }
 
-        // Initialize the page
-        document.addEventListener('DOMContentLoaded', function() {
-            log('🚀 Practical Geocoding Solution ready!', 'info');
-            log('💡 Start with Manual Geocoding to see sample results', 'info');
+        // Initialize on load
+        window.addEventListener('load', function() {
+            updateLoadingState(true, 'Ready to process your data', 'Upload your express_parcel.csv file to start visualization');
         });
+
+        // Show sample hint with performance note
+        function showSampleHint() {
+            const hint = document.createElement('div');
+            hint.className = 'sample-hint fade-in';
+            hint.innerHTML = `
+                💡 <strong>CSV Format:</strong> id, created_time, warehouse_name, shipto_postal_code, shipto_city, carrier, gw, vol, pkg_num<br>
+                ⚡ <strong>Performance:</strong> Automatically processes first 500 records for optimal speed
+            `;
+            document.querySelector('.upload-area').appendChild(hint);
+            setTimeout(() => hint.remove(), 10000);
+        }
+
+        // Auto-show hint after 3 seconds
+        setTimeout(showSampleHint, 3000);
     </script>
 </body>
 </html>
