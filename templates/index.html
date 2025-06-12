@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Express Parcel Visualization - Python Flask</title>
+    <script src="https://unpkg.com/kepler.gl@3.0.0/umd/keplergl.min.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/redux@4.2.1/dist/redux.min.js"></script>
+    <script src="https://unpkg.com/react-redux@8.1.2/dist/react-redux.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            display: grid;
+            grid-template-rows: auto 1fr;
+            height: 100vh;
+        }
+        
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(15px);
+            padding: 1.5rem 2rem;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            border-bottom: 3px solid #667eea;
+        }
+        
+        .header h1 {
+            color: #2d3748;
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .header p {
+            color: #718096;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+        
+        .upload-section {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .upload-area {
+            flex: 1;
+            min-width: 300px;
+            border: 2px dashed #cbd5e0;
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.8);
+        }
+        
+        .upload-area:hover {
+            border-color: #667eea;
+            background: rgba(255, 255, 255, 0.95);
+            transform: translateY(-2px);
+        }
+        
+        .upload-area.dragover {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.1);
+        }
+        
+        .upload-icon {
+            font-size: 2rem;
+            color: #667eea;
+            margin-bottom: 0.5rem;
+        }
+        
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        }
+        
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.9);
+            color: #4a5568;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .stats {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+        
+        .stat-item {
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            color: #2d3748;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        
+        .main-content {
+            position: relative;
+            background: white;
+            overflow: hidden;
+        }
+        
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(5px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 0.3s ease;
+        }
+        
+        .loading-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid #e2e8f0;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            color: #4a5568;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+        }
+        
+        .loading-details {
+            color: #718096;
+            font-size: 0.9rem;
+            text-align: center;
+            max-width: 400px;
+        }
+        
+        .map-container {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .error-message {
+            background: rgba(245, 101, 101, 0.1);
+            border: 1px solid #f56565;
+            color: #c53030;
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .success-message {
+            background: rgba(72, 187, 120, 0.1);
+            border: 1px solid #48bb78;
+            color: #2f855a;
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .python-badge {
+            background: linear-gradient(135deg, #3776ab, #ffd43b);
+            color: white;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div>
+                    <h1>🐍 Express Parcel Visualization</h1>
+                    <p>Python Flask + Kepler.gl Real-time Logistics Dashboard</p>
+                </div>
+                <div class="python-badge">Python Flask</div>
+            </div>
+            
+            <div class="upload-section">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">📤</div>
+                    <div><strong>Drop CSV file here or click to browse</strong></div>
+                    <div style="font-size: 0.8rem; color: #718096; margin-top: 0.5rem;">
+                        Processes first 500 records for optimal performance
+                    </div>
+                </div>
+                
+                <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                    <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()" id="uploadBtn">
+                        📁 Upload CSV
+                    </button>
+                    <button class="btn btn-secondary" onclick="downloadSample()" id="sampleBtn">
+                        📄 Sample Data
+                    </button>
+                    <button class="btn btn-secondary" onclick="resetVisualization()" id="resetBtn" disabled>
+                        🔄 Reset
+                    </button>
+                </div>
+            </div>
+            
+            <div class="stats" id="statsContainer" style="display: none;"></div>
+            
+            <input type="file" id="fileInput" accept=".csv" style="display: none;">
+        </header>
+
+        <main class="main-content">
+            <div class="loading-overlay" id="loadingOverlay">
+                <div class="loading-spinner"></div>
+                <div class="loading-text" id="loadingText">Ready to process your data</div>
+                <div class="loading-details" id="loadingDetails">
+                    Upload your express_parcel.csv file to start Python-powered visualization
+                </div>
+            </div>
+            
+            <div class="map-container" id="mapContainer"></div>
+        </main>
+    </div>
+
+    <script>
+        let processedData = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            setupEventListeners();
+        });
+
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) {
+                uploadFile(file);
+            }
+        }
+
+        async function uploadFile(file) {
+            if (!file.name.toLowerCase().endsWith('.csv')) {
+                showError('Please upload a CSV file');
+                return;
+            }
+
+            updateLoadingState(true, 'Uploading file...', 'Sending data to Python Flask server...');
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || 'Upload failed');
+                }
+
+                updateLoadingState(true, 'Creating visualization...', 'Rendering Kepler.gl map...');
+
+                // Create visualization with processed data
+                await createVisualization(result.data);
+                
+                // Update statistics
+                updateStats(result.stats);
+                
+                setTimeout(() => {
+                    updateLoadingState(false);
+                    const message = result.stats.original_count > 500 
+                        ? `Successfully visualized ${result.stats.total_records} routes (limited to first 500 records out of ${result.stats.original_count} total)`
+                        : `Successfully visualized ${result.stats.total_records} shipment routes!`;
+                    showSuccess(message);
+                }, 500);
+
+                // Enable reset button
+                document.getElementById('resetBtn').disabled = false;
+                processedData = result.data;
+
+            } catch (error) {
+                console.error('Upload error:', error);
+                updateLoadingState(false);
+                showError('Processing failed: ' + error.message);
+            }
+        }
+
+        async function createVisualization(data) {
+            const mapConfig = {
+                version: 'v1',
+                config: {
+                    mapState: {
+                        latitude: 39.8,
+                        longitude: -98.0,
+                        zoom: 4,
+                        pitch: 20,
+                        bearing: 0
+                    },
+                    visState: {
+                        filters: [
+                            {
+                                dataId: ['shipments'],
+                                id: 'date_filter',
+                                name: ['shipment_date'],
+                                type: 'timeRange',
+                                enlarged: false
+                            },
+                            {
+                                dataId: ['shipments'],
+                                id: 'warehouse_filter',
+                                name: ['warehouse_name'],
+                                type: 'multiSelect',
+                                enlarged: false
+                            }
+                        ],
+                        layers: [
+                            {
+                                id: 'arc_layer',
+                                type: 'arc',
+                                config: {
+                                    dataId: 'shipments',
+                                    label: 'Shipping Routes',
+                                    color: [255, 0, 0],
+                                    columns: {
+                                        lat0: 'origin_lat',
+                                        lng0: 'origin_lng',
+                                        lat1: 'dest_lat',
+                                        lng1: 'dest_lng'
+                                    },
+                                    isVisible: true,
+                                    visConfig: {
+                                        opacity: 0.8,
+                                        thickness: 3,
+                                        colorRange: {
+                                            name: 'Global Warming',
+                                            type: 'sequential',
+                                            colors: ['#5A1846', '#900C3F', '#C70039', '#E3611C', '#F1920E', '#FFC300']
+                                        },
+                                        sizeRange: [1, 10],
+                                        targetColor: [255, 255, 255]
+                                    }
+                                }
+                            },
+                            {
+                                id: 'warehouse_points',
+                                type: 'point',
+                                config: {
+                                    dataId: 'shipments',
+                                    label: 'Warehouses',
+                                    color: [0, 255, 0],
+                                    columns: {
+                                        lat: 'origin_lat',
+                                        lng: 'origin_lng'
+                                    },
+                                    isVisible: true,
+                                    visConfig: {
+                                        opacity: 1,
+                                        radius: 25,
+                                        radiusRange: [15, 50],
+                                        outline: true,
+                                        colorRange: {
+                                            name: 'ColorBrewer Set1-9',
+                                            type: 'qualitative',
+                                            colors: ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#f781bf', '#999999']
+                                        }
+                                    }
+                                }
+                            },
+                            {
+                                id: 'destination_points',
+                                type: 'point',
+                                config: {
+                                    dataId: 'shipments',
+                                    label: 'Destinations',
+                                    color: [0, 100, 255],
+                                    columns: {
+                                        lat: 'dest_lat',
+                                        lng: 'dest_lng'
+                                    },
+                                    isVisible: true,
+                                    visConfig: {
+                                        opacity: 0.7,
+                                        radius: 8,
+                                        radiusRange: [3, 20]
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            };
+
+            try {
+                const mapContainer = document.getElementById('mapContainer');
+                mapContainer.innerHTML = '';
+
+                // Create Kepler instance
+                const keplerElement = React.createElement(KeplerGl, {
+                    id: 'flask-map',
+                    width: '100%',
+                    height: '100%',
+                    config: mapConfig.config
+                });
+
+                ReactDOM.render(keplerElement, mapContainer);
+
+                // Add data after a short delay
+                setTimeout(() => {
+                    const datasets = [{
+                        info: {
+                            id: 'shipments',
+                            label: 'Express Parcel Shipments (Python Processed)'
+                        },
+                        data: data
+                    }];
+
+                    if (window.keplerGl) {
+                        window.keplerGl.addDataToMap({
+                            datasets: datasets,
+                            config: mapConfig.config
+                        });
+                    }
+                }, 1000);
+
+            } catch (error) {
+                console.error('Visualization creation failed:', error);
+                throw error;
+            }
+        }
+
+        function updateStats(stats) {
+            const container = document.getElementById('statsContainer');
+            
+            container.innerHTML = `
+                <div class="stat-item">
+                    ${stats.total_records} Records
+                </div>
+                <div class="stat-item">
+                    ${stats.unique_warehouses} Warehouses
+                </div>
+                <div class="stat-item">
+                    ${stats.unique_destinations} Destinations
+                </div>
+                <div class="stat-item">
+                    ${Math.round(stats.total_distance).toLocaleString()} km Total Distance
+                </div>
+                <div class="stat-item">
+                    ${stats.date_range.start} → ${stats.date_range.end}
+                </div>
+            `;
+            
+            // Add limitation note if applicable
+            if (stats.original_count > 500) {
+                const limitNote = document.createElement('div');
+                limitNote.className = 'stat-item';
+                limitNote.style.background = 'rgba(255, 193, 7, 0.3)';
+                limitNote.innerHTML = `Limited from ${stats.original_count} total`;
+                container.appendChild(limitNote);
+            }
+            
+            container.style.display = 'flex';
+        }
+
+        function updateLoadingState(loading, message = '', details = '') {
+            const overlay = document.getElementById('loadingOverlay');
+            const text = document.getElementById('loadingText');
+            const detailsEl = document.getElementById('loadingDetails');
+
+            if (loading) {
+                overlay.classList.remove('hidden');
+                if (message) text.textContent = message;
+                if (details) detailsEl.textContent = details;
+            } else {
+                overlay.classList.add('hidden');
+            }
+        }
+
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message fade-in';
+            errorDiv.innerHTML = `⚠️ ${message}`;
+            document.querySelector('.header').appendChild(errorDiv);
+            setTimeout(() => errorDiv.remove(), 5000);
+        }
+
+        function showSuccess(message) {
+            const successDiv = document.createElement('div');
+            successDiv.className = 'success-message fade-in';
+            successDiv.innerHTML = `✅ ${message}`;
+            document.querySelector('.header').appendChild(successDiv);
+            setTimeout(() => successDiv.remove(), 5000);
+        }
+
+        async function downloadSample() {
+            try {
+                const response = await fetch('/api/sample');
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'sample_express_parcel.csv';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                showSuccess('Sample CSV downloaded! Upload it to see the Python-powered visualization.');
+            } catch (error) {
+                showError('Failed to download sample data');
+            }
+        }
+
+        function resetVisualization() {
+            // Reset all states
+            processedData = null;
+            
+            // Clear map
+            const mapContainer = document.getElementById('mapContainer');
+            mapContainer.innerHTML = '';
+            
+            // Reset UI
+            document.getElementById('fileInput').value = '';
+            document.getElementById('statsContainer').style.display = 'none';
+            document.getElementById('resetBtn').disabled = true;
+            
+            // Show initial loading state
+            updateLoadingState(true, 'Ready to process your data', 'Upload your express_parcel.csv file to start Python-powered visualization');
+            
+            // Remove any messages
+            document.querySelectorAll('.error-message, .success-message').forEach(el => el.remove());
+        }
+
+        // Initialize on load
+        window.addEventListener('load', function() {
+            updateLoadingState(true, 'Ready to process your data', 'Upload your express_parcel.csv file to start Python-powered visualization');
+        });
+    </script>
+</body>
+</html>
