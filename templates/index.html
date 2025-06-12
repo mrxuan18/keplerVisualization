@@ -240,6 +240,16 @@
             from { opacity: 0; transform: translateY(20px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        
+        .debug-info {
+            background: rgba(255, 255, 255, 0.1);
+            color: #2d3748;
+            padding: 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            margin-top: 0.5rem;
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -260,10 +270,13 @@
                     <div style="font-size: 0.8rem; color: #718096; margin-top: 0.5rem;">
                         Processes first 500 records for optimal performance
                     </div>
+                    <div class="debug-info" id="debugInfo">
+                        Debug: Waiting for file selection...
+                    </div>
                 </div>
                 
                 <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-                    <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()" id="uploadBtn">
+                    <button class="btn btn-primary" onclick="triggerFileUpload()" id="uploadBtn">
                         📁 Upload CSV
                     </button>
                     <button class="btn btn-secondary" onclick="downloadSample()" id="sampleBtn">
@@ -295,42 +308,172 @@
 
     <script>
         let processedData = null;
+        let debugMode = true; // 开启调试模式
+
+        // 调试函数
+        function debugLog(message) {
+            if (debugMode) {
+                console.log('[DEBUG]', message);
+                const debugInfo = document.getElementById('debugInfo');
+                if (debugInfo) {
+                    debugInfo.style.display = 'block';
+                    debugInfo.textContent = 'Debug: ' + message;
+                }
+            }
+        }
+
+        // 触发文件上传
+        function triggerFileUpload() {
+            debugLog('Upload button clicked');
+            const fileInput = document.getElementById('fileInput');
+            if (fileInput) {
+                debugLog('File input found, triggering click');
+                fileInput.click();
+            } else {
+                debugLog('ERROR: File input not found');
+                showError('File input element not found');
+            }
+        }
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
+            debugLog('DOM loaded, setting up event listeners');
             setupEventListeners();
         });
 
+        function setupEventListeners() {
+            const fileInput = document.getElementById('fileInput');
+            const uploadArea = document.getElementById('uploadArea');
+
+            if (!fileInput) {
+                debugLog('ERROR: File input element not found during setup');
+                showError('File input initialization failed');
+                return;
+            }
+
+            if (!uploadArea) {
+                debugLog('ERROR: Upload area element not found during setup');
+                return;
+            }
+
+            // File input change event - 强化版本
+            fileInput.addEventListener('change', function(e) {
+                debugLog('File input change event triggered');
+                handleFileSelect(e);
+            });
+
+            // 额外的事件监听
+            fileInput.addEventListener('input', function(e) {
+                debugLog('File input "input" event triggered');
+                handleFileSelect(e);
+            });
+
+            // Drag and drop events
+            uploadArea.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                debugLog('Drag over detected');
+                handleDragOver(e);
+            });
+
+            uploadArea.addEventListener('dragleave', function(e) {
+                debugLog('Drag leave detected');
+                handleDragLeave();
+            });
+
+            uploadArea.addEventListener('drop', function(e) {
+                e.preventDefault();
+                debugLog('File drop detected');
+                handleFileDrop(e);
+            });
+
+            // Click event for upload area
+            uploadArea.addEventListener('click', function(e) {
+                debugLog('Upload area clicked');
+                triggerFileUpload();
+            });
+
+            debugLog('All event listeners set up successfully');
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            document.getElementById('uploadArea').classList.add('dragover');
+        }
+
+        function handleDragLeave() {
+            document.getElementById('uploadArea').classList.remove('dragover');
+        }
+
+        function handleFileDrop(e) {
+            e.preventDefault();
+            document.getElementById('uploadArea').classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            debugLog(`Files dropped: ${files.length}`);
+            
+            if (files.length > 0) {
+                debugLog(`Processing dropped file: ${files[0].name}`);
+                uploadFile(files[0]);
+            } else {
+                debugLog('No files in drop event');
+            }
+        }
+
         function handleFileSelect(e) {
-            const file = e.target.files[0];
-            if (file) {
+            debugLog('handleFileSelect called');
+            
+            const files = e.target.files;
+            debugLog(`Files selected: ${files ? files.length : 0}`);
+            
+            if (files && files.length > 0) {
+                const file = files[0];
+                debugLog(`Selected file: ${file.name}, size: ${file.size}, type: ${file.type}`);
                 uploadFile(file);
+            } else {
+                debugLog('No files selected or files array empty');
+                showError('No file was selected. Please try again.');
             }
         }
 
         async function uploadFile(file) {
+            debugLog(`Starting upload for file: ${file.name}`);
+            
+            if (!file) {
+                debugLog('ERROR: No file provided to uploadFile function');
+                showError('No file provided');
+                return;
+            }
+
             if (!file.name.toLowerCase().endsWith('.csv')) {
+                debugLog(`ERROR: Invalid file type: ${file.name}`);
                 showError('Please upload a CSV file');
                 return;
             }
 
+            debugLog('File validation passed, starting upload process');
             updateLoadingState(true, 'Uploading file...', 'Sending data to Python Flask server...');
 
             try {
                 const formData = new FormData();
                 formData.append('file', file);
+                
+                debugLog('FormData created, making fetch request');
 
                 const response = await fetch('/api/upload', {
                     method: 'POST',
                     body: formData
                 });
 
+                debugLog(`Server response status: ${response.status}`);
+
                 const result = await response.json();
+                debugLog('Server response received');
 
                 if (!response.ok) {
-                    throw new Error(result.error || 'Upload failed');
+                    throw new Error(result.error || `Server error: ${response.status}`);
                 }
 
+                debugLog('Upload successful, creating visualization');
                 updateLoadingState(true, 'Creating visualization...', 'Rendering Kepler.gl map...');
 
                 // Create visualization with processed data
@@ -345,6 +488,7 @@
                         ? `Successfully visualized ${result.stats.total_records} routes (limited to first 500 records out of ${result.stats.original_count} total)`
                         : `Successfully visualized ${result.stats.total_records} shipment routes!`;
                     showSuccess(message);
+                    debugLog('Visualization completed successfully');
                 }, 500);
 
                 // Enable reset button
@@ -352,6 +496,7 @@
                 processedData = result.data;
 
             } catch (error) {
+                debugLog(`Upload error: ${error.message}`);
                 console.error('Upload error:', error);
                 updateLoadingState(false);
                 showError('Processing failed: ' + error.message);
@@ -359,6 +504,8 @@
         }
 
         async function createVisualization(data) {
+            debugLog('Creating Kepler.gl visualization');
+            
             const mapConfig = {
                 version: 'v1',
                 config: {
@@ -492,10 +639,14 @@
                             datasets: datasets,
                             config: mapConfig.config
                         });
+                        debugLog('Data added to Kepler.gl map');
+                    } else {
+                        debugLog('WARNING: window.keplerGl not available');
                     }
                 }, 1000);
 
             } catch (error) {
+                debugLog(`Visualization creation failed: ${error.message}`);
                 console.error('Visualization creation failed:', error);
                 throw error;
             }
@@ -549,14 +700,16 @@
         }
 
         function showError(message) {
+            debugLog(`Showing error: ${message}`);
             const errorDiv = document.createElement('div');
             errorDiv.className = 'error-message fade-in';
             errorDiv.innerHTML = `⚠️ ${message}`;
             document.querySelector('.header').appendChild(errorDiv);
-            setTimeout(() => errorDiv.remove(), 5000);
+            setTimeout(() => errorDiv.remove(), 8000);
         }
 
         function showSuccess(message) {
+            debugLog(`Showing success: ${message}`);
             const successDiv = document.createElement('div');
             successDiv.className = 'success-message fade-in';
             successDiv.innerHTML = `✅ ${message}`;
@@ -565,6 +718,7 @@
         }
 
         async function downloadSample() {
+            debugLog('Downloading sample data');
             try {
                 const response = await fetch('/api/sample');
                 const blob = await response.blob();
@@ -578,12 +732,15 @@
                 window.URL.revokeObjectURL(url);
                 
                 showSuccess('Sample CSV downloaded! Upload it to see the Python-powered visualization.');
+                debugLog('Sample download completed');
             } catch (error) {
+                debugLog(`Sample download failed: ${error.message}`);
                 showError('Failed to download sample data');
             }
         }
 
         function resetVisualization() {
+            debugLog('Resetting visualization');
             // Reset all states
             processedData = null;
             
@@ -596,16 +753,31 @@
             document.getElementById('statsContainer').style.display = 'none';
             document.getElementById('resetBtn').disabled = true;
             
+            // Hide debug info
+            const debugInfo = document.getElementById('debugInfo');
+            if (debugInfo) {
+                debugInfo.style.display = 'none';
+            }
+            
             // Show initial loading state
             updateLoadingState(true, 'Ready to process your data', 'Upload your express_parcel.csv file to start Python-powered visualization');
             
             // Remove any messages
             document.querySelectorAll('.error-message, .success-message').forEach(el => el.remove());
+            
+            debugLog('Reset completed');
         }
 
         // Initialize on load
         window.addEventListener('load', function() {
+            debugLog('Window loaded');
             updateLoadingState(true, 'Ready to process your data', 'Upload your express_parcel.csv file to start Python-powered visualization');
+        });
+
+        // Error handling
+        window.addEventListener('error', function(e) {
+            debugLog(`Global error: ${e.message}`);
+            console.error('Global error:', e);
         });
     </script>
 </body>
