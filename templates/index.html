@@ -3,17 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Express Parcel Visualization - Flask + Kepler.gl Official</title>
+    <title>Express Parcel Visualization - Flask + Kepler.gl</title>
     
-    <!-- Kepler.gl官方推荐的UMD依赖 - 使用兼容版本 -->
-    <script crossorigin src="https://unpkg.com/react@16/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@16/umd/react-dom.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/redux@3.7.2/dist/redux.js"></script>
-    <script crossorigin src="https://unpkg.com/react-redux@5.1.1/dist/react-redux.min.js"></script>
-    <script crossorigin src="https://unpkg.com/styled-components@4.1.3/dist/styled-components.min.js"></script>
-    
-    <!-- Kepler.gl完整UMD包 -->
-    <script crossorigin src="https://unpkg.com/kepler.gl@2.5.5/umd/keplergl.min.js"></script>
+    <!-- 精简版本，使用最稳定的库组合 -->
+    <script src="https://unpkg.com/react@16/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@16/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/redux@3.7.2/dist/redux.js"></script>
+    <script src="https://unpkg.com/react-redux@5.1.1/dist/react-redux.min.js"></script>
+    <script src="https://unpkg.com/kepler.gl@2.5.5/umd/keplergl.min.js"></script>
     
     <style>
         * {
@@ -47,9 +44,6 @@
             font-size: 1.8rem;
             font-weight: 700;
             margin-bottom: 0.5rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
         }
         
         .header p {
@@ -83,11 +77,6 @@
             transform: translateY(-2px);
         }
         
-        .upload-area.dragover {
-            border-color: #667eea;
-            background: rgba(102, 126, 234, 0.1);
-        }
-        
         .upload-icon {
             font-size: 2rem;
             color: #667eea;
@@ -101,19 +90,11 @@
             cursor: pointer;
             font-weight: 600;
             transition: all 0.3s ease;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
         }
         
         .btn-primary {
             background: linear-gradient(135deg, #667eea, #764ba2);
             color: white;
-        }
-        
-        .btn-primary:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
         }
         
         .btn-secondary {
@@ -157,7 +138,6 @@
             right: 0;
             bottom: 0;
             background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(5px);
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -211,7 +191,7 @@
             color: #c53030;
             padding: 1rem;
             border-radius: 8px;
-            margin: 1rem;
+            margin: 1rem 0;
             display: flex;
             align-items: center;
             gap: 0.5rem;
@@ -223,66 +203,52 @@
             color: #2f855a;
             padding: 1rem;
             border-radius: 8px;
-            margin: 1rem;
+            margin: 1rem 0;
             display: flex;
             align-items: center;
             gap: 0.5rem;
         }
         
-        .python-badge {
-            background: linear-gradient(135deg, #3776ab, #ffd43b);
-            color: white;
-            padding: 0.3rem 0.8rem;
-            border-radius: 20px;
+        .status-display {
+            background: rgba(102, 126, 234, 0.1);
+            border: 1px solid #667eea;
+            color: #4c51bf;
+            padding: 0.75rem;
+            border-radius: 8px;
+            margin: 0.5rem 0;
+            font-size: 0.9rem;
+        }
+        
+        .debug-info {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+            font-family: monospace;
             font-size: 0.8rem;
-            font-weight: 700;
-        }
-        
-        .fade-in {
-            animation: fadeIn 0.5s ease-in;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .library-status {
-            background: rgba(72, 187, 120, 0.1);
-            color: #2f855a;
-            padding: 0.5rem;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            margin-top: 0.5rem;
-            border: 1px solid #48bb78;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <header class="header">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <div>
-                    <h1>🗺️ Express Parcel Visualization</h1>
-                    <p>Flask + Kepler.gl Schema Manager Integration</p>
-                </div>
-                <div class="python-badge">Official UMD</div>
-            </div>
+            <h1>🗺️ Express Parcel Visualization</h1>
+            <p>Flask + Kepler.gl Integration</p>
+            
+            <div id="statusDisplay" class="status-display">🔄 Checking library availability...</div>
             
             <div class="upload-section">
                 <div class="upload-area" id="uploadArea">
                     <div class="upload-icon">📤</div>
                     <div><strong>Drop CSV file here or click to browse</strong></div>
-                    <div style="font-size: 0.8rem; color: #718096; margin-top: 0.5rem;">
-                        Using Kepler.gl Schema Manager for optimal performance
-                    </div>
-                    <div class="library-status" id="libraryStatus">
-                        🔄 Checking libraries...
-                    </div>
                 </div>
                 
                 <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-                    <button class="btn btn-primary" onclick="triggerFileUpload()" id="uploadBtn">
+                    <button class="btn btn-primary" onclick="triggerFileUpload()" id="uploadBtn" disabled>
                         📁 Upload CSV
                     </button>
                     <button class="btn btn-secondary" onclick="downloadSample()" id="sampleBtn">
@@ -295,6 +261,7 @@
             </div>
             
             <div class="stats" id="statsContainer" style="display: none;"></div>
+            <div id="debugInfo" class="debug-info" style="display: none;"></div>
             
             <input type="file" id="fileInput" accept=".csv" style="display: none;">
         </header>
@@ -302,10 +269,8 @@
         <main class="main-content">
             <div class="loading-overlay" id="loadingOverlay">
                 <div class="loading-spinner"></div>
-                <div class="loading-text" id="loadingText">Initializing Kepler.gl...</div>
-                <div class="loading-details" id="loadingDetails">
-                    Setting up the official Schema Manager integration
-                </div>
+                <div class="loading-text" id="loadingText">Initializing...</div>
+                <div class="loading-details" id="loadingDetails">Please wait...</div>
             </div>
             
             <div class="map-container" id="mapContainer"></div>
@@ -313,221 +278,162 @@
     </div>
 
     <script>
-        // Mapbox Token
-        const MAPBOX_TOKEN = 'pk.eyJ1IjoieXV4dWFsYW4iLCJhIjoiY21idG03YmZlMDR2bDJxcHVoZjRjY2l2ciJ9.7NP8FWPFIAWtr7rLkhlc1A';
-        
         // 全局变量
+        const MAPBOX_TOKEN = 'pk.eyJ1IjoieXV4dWFsYW4iLCJhIjoiY21idG03YmZlMDR2bDJxcHVoZjRjY2l2ciJ9.7NP8FWPFIAWtr7rLkhlc1A';
         let store = null;
-        let processedData = null;
-        const MAP_ID = 'flask-visualization-map';
+        let app = null;
+        const MAP_ID = 'logistics-map';
         
-        // 等待所有库加载完成
-        function waitForLibraries() {
-            return new Promise((resolve) => {
-                let attempts = 0;
-                const maxAttempts = 50; // 5秒超时
-                
-                const checkInterval = setInterval(() => {
-                    attempts++;
-                    
-                    const allLoaded = 
-                        typeof React !== 'undefined' &&
-                        typeof ReactDOM !== 'undefined' &&
-                        typeof Redux !== 'undefined' &&
-                        typeof ReactRedux !== 'undefined' &&
-                        typeof KeplerGl !== 'undefined';
-                    
-                    if (allLoaded) {
-                        console.log('All libraries loaded successfully');
-                        clearInterval(checkInterval);
-                        resolve(true);
-                    } else if (attempts >= maxAttempts) {
-                        console.error('Timeout waiting for libraries');
-                        clearInterval(checkInterval);
-                        resolve(false);
-                    }
-                }, 100);
-            });
-        }
-        
-        // 更新库状态显示
-        function updateLibraryStatus(status, message) {
-            const statusEl = document.getElementById('libraryStatus');
-            if (status === 'success') {
-                statusEl.innerHTML = `✅ ${message}`;
-                statusEl.style.background = 'rgba(72, 187, 120, 0.1)';
-                statusEl.style.borderColor = '#48bb78';
-                statusEl.style.color = '#2f855a';
-            } else if (status === 'error') {
-                statusEl.innerHTML = `❌ ${message}`;
-                statusEl.style.background = 'rgba(245, 101, 101, 0.1)';
-                statusEl.style.borderColor = '#f56565';
-                statusEl.style.color = '#c53030';
-            } else {
-                statusEl.innerHTML = `🔄 ${message}`;
+        // 调试日志函数
+        function debugLog(message, data = null) {
+            console.log(message, data);
+            const debugDiv = document.getElementById('debugInfo');
+            if (debugDiv) {
+                debugDiv.style.display = 'block';
+                debugDiv.textContent += new Date().toLocaleTimeString() + ': ' + message + 
+                    (data ? '\n' + JSON.stringify(data, null, 2) : '') + '\n\n';
+                debugDiv.scrollTop = debugDiv.scrollHeight;
             }
         }
         
-        // 初始化Kepler.gl应用
-        async function initializeKeplerGl() {
-            try {
-                console.log('Initializing Kepler.gl with official method...');
-                updateLibraryStatus('loading', 'Initializing Kepler.gl...');
-                
-                // 等待库加载完成
-                const librariesLoaded = await waitForLibraries();
-                if (!librariesLoaded) {
-                    throw new Error('Required libraries failed to load');
-                }
-                
-                // 创建Redux store - 按照官方推荐方式
-                const rootReducer = Redux.combineReducers({
-                    keplerGl: KeplerGl.keplerGlReducer
-                });
-                
-                store = Redux.createStore(rootReducer, {});
-                console.log('Redux store created:', store);
-                
-                // 创建Kepler.gl应用组件 - 使用官方推荐结构
-                const app = React.createElement(
-                    ReactRedux.Provider,
-                    { store: store },
-                    React.createElement(KeplerGl.default || KeplerGl, {
-                        id: MAP_ID,
-                        mapboxApiAccessToken: MAPBOX_TOKEN,
-                        width: window.innerWidth,
-                        height: window.innerHeight - 200,
-                        theme: 'light'
-                    })
-                );
-                
-                // 渲染到DOM
-                const container = document.getElementById('mapContainer');
-                ReactDOM.render(app, container);
-                
-                console.log('Kepler.gl component rendered successfully');
-                updateLibraryStatus('success', 'Kepler.gl initialized with Schema Manager');
-                
+        // 更新状态显示
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('statusDisplay');
+            statusDiv.textContent = message;
+            statusDiv.className = 'status-display';
+            
+            if (type === 'error') {
+                statusDiv.style.background = 'rgba(245, 101, 101, 0.1)';
+                statusDiv.style.borderColor = '#f56565';
+                statusDiv.style.color = '#c53030';
+            } else if (type === 'success') {
+                statusDiv.style.background = 'rgba(72, 187, 120, 0.1)';
+                statusDiv.style.borderColor = '#48bb78';
+                statusDiv.style.color = '#2f855a';
+            }
+        }
+        
+        // 检查库是否加载
+        function checkLibraries() {
+            debugLog('Starting library check...');
+            
+            const libraries = {
+                React: typeof React !== 'undefined',
+                ReactDOM: typeof ReactDOM !== 'undefined',
+                Redux: typeof Redux !== 'undefined',
+                ReactRedux: typeof ReactRedux !== 'undefined',
+                KeplerGl: typeof KeplerGl !== 'undefined'
+            };
+            
+            debugLog('Library status:', libraries);
+            
+            const allLoaded = Object.values(libraries).every(loaded => loaded);
+            
+            if (allLoaded) {
+                debugLog('KeplerGl exports:', Object.keys(KeplerGl));
                 return true;
-                
-            } catch (error) {
-                console.error('Failed to initialize Kepler.gl:', error);
-                updateLibraryStatus('error', 'Initialization failed: ' + error.message);
-                showError('Failed to initialize Kepler.gl: ' + error.message);
+            } else {
+                const missing = Object.entries(libraries)
+                    .filter(([name, loaded]) => !loaded)
+                    .map(([name]) => name);
+                debugLog('Missing libraries:', missing);
                 return false;
             }
         }
         
-        // 使用官方Schema Manager添加数据
-        function addDataToKepler(data, config = null) {
-            if (!store) {
-                console.error('Redux store not available');
-                return;
-            }
-            
+        // 简化的初始化函数
+        function initializeKeplerGl() {
             try {
-                console.log('Adding data using official addDataToMap action');
+                debugLog('Initializing Kepler.gl...');
+                updateStatus('🔧 Initializing Kepler.gl...', 'info');
                 
-                // 准备数据集 - 按照官方格式
-                const datasets = [{
-                    info: {
-                        id: 'shipments',
-                        label: 'Express Parcel Shipments'
-                    },
-                    data: {
-                        fields: [
-                            { name: 'origin_lat', type: 'real' },
-                            { name: 'origin_lng', type: 'real' },
-                            { name: 'dest_lat', type: 'real' },
-                            { name: 'dest_lng', type: 'real' },
-                            { name: 'shipment_date', type: 'timestamp' },
-                            { name: 'warehouse_name', type: 'string' },
-                            { name: 'dest_address', type: 'string' },
-                            { name: 'weight', type: 'real' },
-                            { name: 'distance_km', type: 'real' }
-                        ],
-                        allData: data
-                    }
-                }];
+                if (!checkLibraries()) {
+                    throw new Error('Required libraries not loaded');
+                }
                 
-                // 默认配置
-                const defaultConfig = {
-                    visState: {
-                        layers: [
-                            {
-                                id: 'shipping-routes',
-                                type: 'arc',
-                                config: {
-                                    dataId: 'shipments',
-                                    label: 'Shipping Routes',
-                                    color: [255, 0, 0],
-                                    columns: {
-                                        lat0: 'origin_lat',
-                                        lng0: 'origin_lng',
-                                        lat1: 'dest_lat',
-                                        lng1: 'dest_lng'
-                                    },
-                                    isVisible: true,
-                                    visConfig: {
-                                        opacity: 0.8,
-                                        thickness: 2,
-                                        colorRange: {
-                                            name: 'Global Warming',
-                                            type: 'sequential',
-                                            colors: ['#5A1846', '#900C3F', '#C70039', '#E3611C', '#F1920E', '#FFC300']
-                                        }
-                                    }
-                                }
-                            },
-                            {
-                                id: 'warehouse-points',
-                                type: 'point',
-                                config: {
-                                    dataId: 'shipments',
-                                    label: 'Warehouses',
-                                    color: [0, 255, 0],
-                                    columns: {
-                                        lat: 'origin_lat',
-                                        lng: 'origin_lng'
-                                    },
-                                    isVisible: true,
-                                    visConfig: {
-                                        opacity: 1,
-                                        radius: 20,
-                                        outline: true
-                                    }
-                                }
-                            }
-                        ]
-                    },
-                    mapState: {
-                        latitude: 39.8,
-                        longitude: -98.0,
-                        zoom: 4,
-                        pitch: 20,
-                        bearing: 0
-                    }
-                };
+                // 创建reducer
+                const keplerGlReducer = KeplerGl.keplerGlReducer;
+                if (!keplerGlReducer) {
+                    throw new Error('keplerGlReducer not found');
+                }
+                debugLog('Found keplerGlReducer');
                 
-                // 使用官方addDataToMap action
-                const addDataAction = KeplerGl.addDataToMap({
-                    datasets: datasets,
-                    config: config || defaultConfig,
-                    options: {
-                        centerMap: true,
-                        readOnly: false
-                    }
+                // 创建store
+                const rootReducer = Redux.combineReducers({
+                    keplerGl: keplerGlReducer
                 });
                 
-                // Dispatch action到store
-                store.dispatch(addDataAction);
+                store = Redux.createStore(rootReducer);
+                debugLog('Store created:', store.getState());
                 
-                console.log('Data successfully added to Kepler.gl using Schema Manager');
+                // 创建Kepler.gl组件
+                const KeplerGlComponent = KeplerGl.default || KeplerGl;
+                debugLog('Using KeplerGl component:', typeof KeplerGlComponent);
+                
+                // 创建连接的组件
+                const ConnectedKeplerGl = ReactRedux.connect(
+                    state => state,
+                    dispatch => ({ dispatch })
+                )(KeplerGlComponent);
+                
+                // 创建应用
+                app = React.createElement(
+                    ReactRedux.Provider,
+                    { store: store },
+                    React.createElement(ConnectedKeplerGl, {
+                        id: MAP_ID,
+                        mapboxApiAccessToken: MAPBOX_TOKEN,
+                        width: window.innerWidth,
+                        height: window.innerHeight - 250
+                    })
+                );
+                
+                // 渲染
+                ReactDOM.render(app, document.getElementById('mapContainer'));
+                
+                debugLog('Kepler.gl rendered successfully');
+                updateStatus('✅ Kepler.gl initialized successfully!', 'success');
+                document.getElementById('uploadBtn').disabled = false;
+                
+                return true;
                 
             } catch (error) {
-                console.error('Error adding data to Kepler.gl:', error);
-                showError('Failed to add data to map: ' + error.message);
+                debugLog('Initialization error:', error);
+                updateStatus('❌ Failed to initialize: ' + error.message, 'error');
+                showError('Initialization failed: ' + error.message);
+                return false;
             }
+        }
+        
+        // 添加数据到地图
+        function addDataToMap(data) {
+            if (!store) {
+                throw new Error('Store not initialized');
+            }
+            
+            debugLog('Adding data to map, sample:', data.slice(0, 2));
+            
+            const addDataToMapAction = KeplerGl.addDataToMap;
+            if (!addDataToMapAction) {
+                throw new Error('addDataToMap action not found');
+            }
+            
+            const payload = {
+                datasets: {
+                    info: { id: 'shipments', label: 'Shipment Data' },
+                    data: data
+                },
+                options: { centerMap: true }
+            };
+            
+            debugLog('Dispatching data:', payload);
+            store.dispatch(addDataToMapAction(payload));
+            
+            // 验证数据是否添加成功
+            setTimeout(() => {
+                const state = store.getState();
+                debugLog('Store state after data addition:', state);
+            }, 1000);
         }
         
         // 文件上传处理
@@ -538,11 +444,11 @@
             }
             
             if (!store) {
-                showError('Kepler.gl not initialized. Please refresh the page.');
+                showError('Kepler.gl not initialized');
                 return;
             }
             
-            updateLoadingState(true, 'Processing file...', 'Sending data to Flask server...');
+            updateLoadingState(true, 'Processing file...', 'Uploading to server...');
             
             try {
                 const formData = new FormData();
@@ -553,85 +459,42 @@
                     body: formData
                 });
                 
-                const result = await response.json();
-                
                 if (!response.ok) {
-                    throw new Error(result.error || `Server error: ${response.status}`);
+                    const errorText = await response.text();
+                    throw new Error(`Server error: ${response.status} - ${errorText}`);
                 }
                 
-                updateLoadingState(true, 'Creating visualization...', 'Using Kepler.gl Schema Manager...');
+                const result = await response.json();
+                debugLog('Server response:', result);
                 
-                // 使用Schema Manager添加数据
-                addDataToKepler(result.data);
+                if (result.error) {
+                    throw new Error(result.error);
+                }
                 
-                // 更新统计信息
-                updateStats(result.stats);
+                updateLoadingState(true, 'Adding to map...', 'Visualizing data...');
+                
+                // 添加数据到地图
+                addDataToMap(result.data);
+                
+                // 更新统计
+                if (result.stats) {
+                    updateStats(result.stats);
+                }
                 
                 setTimeout(() => {
                     updateLoadingState(false);
-                    const message = result.stats.original_count > 500 
-                        ? `Successfully visualized ${result.stats.total_records} routes (limited to first 500 records)`
-                        : `Successfully visualized ${result.stats.total_records} shipment routes!`;
-                    showSuccess(message);
-                }, 1000);
-                
-                document.getElementById('resetBtn').disabled = false;
-                processedData = result.data;
+                    showSuccess(`Successfully visualized ${result.data.length} records!`);
+                    document.getElementById('resetBtn').disabled = false;
+                }, 1500);
                 
             } catch (error) {
-                console.error('Upload error:', error);
+                debugLog('Upload error:', error);
                 updateLoadingState(false);
-                showError('Processing failed: ' + error.message);
-            }
-        }
-        
-        // 事件处理函数
-        function triggerFileUpload() {
-            if (!store) {
-                showError('Kepler.gl not ready. Please wait for initialization to complete.');
-                return;
-            }
-            document.getElementById('fileInput').click();
-        }
-        
-        function handleFileSelect(e) {
-            const files = e.target.files;
-            if (files && files.length > 0) {
-                uploadFile(files[0]);
-            }
-        }
-        
-        function handleDragOver(e) {
-            e.preventDefault();
-            document.getElementById('uploadArea').classList.add('dragover');
-        }
-        
-        function handleDragLeave() {
-            document.getElementById('uploadArea').classList.remove('dragover');
-        }
-        
-        function handleFileDrop(e) {
-            e.preventDefault();
-            document.getElementById('uploadArea').classList.remove('dragover');
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                uploadFile(files[0]);
+                showError('Upload failed: ' + error.message);
             }
         }
         
         // 工具函数
-        function updateStats(stats) {
-            const container = document.getElementById('statsContainer');
-            container.innerHTML = `
-                <div class="stat-item">${stats.total_records} Records</div>
-                <div class="stat-item">${stats.unique_warehouses} Warehouses</div>
-                <div class="stat-item">${stats.unique_destinations} Destinations</div>
-                <div class="stat-item">${Math.round(stats.total_distance).toLocaleString()} km Total</div>
-                <div class="stat-item">${stats.date_range.start} → ${stats.date_range.end}</div>
-            `;
-            container.style.display = 'flex';
-        }
-        
         function updateLoadingState(loading, message = '', details = '') {
             const overlay = document.getElementById('loadingOverlay');
             const text = document.getElementById('loadingText');
@@ -648,7 +511,7 @@
         
         function showError(message) {
             const errorDiv = document.createElement('div');
-            errorDiv.className = 'error-message fade-in';
+            errorDiv.className = 'error-message';
             errorDiv.innerHTML = `⚠️ ${message}`;
             document.querySelector('.header').appendChild(errorDiv);
             setTimeout(() => errorDiv.remove(), 8000);
@@ -656,10 +519,31 @@
         
         function showSuccess(message) {
             const successDiv = document.createElement('div');
-            successDiv.className = 'success-message fade-in';
+            successDiv.className = 'success-message';
             successDiv.innerHTML = `✅ ${message}`;
             document.querySelector('.header').appendChild(successDiv);
             setTimeout(() => successDiv.remove(), 5000);
+        }
+        
+        function updateStats(stats) {
+            const container = document.getElementById('statsContainer');
+            container.innerHTML = `
+                <div class="stat-item">${stats.total_records || 'N/A'} Records</div>
+                <div class="stat-item">${stats.unique_warehouses || 'N/A'} Warehouses</div>
+                <div class="stat-item">${stats.unique_destinations || 'N/A'} Destinations</div>
+            `;
+            container.style.display = 'flex';
+        }
+        
+        function triggerFileUpload() {
+            document.getElementById('fileInput').click();
+        }
+        
+        function handleFileSelect(e) {
+            const files = e.target.files;
+            if (files && files.length > 0) {
+                uploadFile(files[0]);
+            }
         }
         
         async function downloadSample() {
@@ -681,56 +565,33 @@
         }
         
         function resetVisualization() {
-            processedData = null;
-            document.getElementById('fileInput').value = '';
-            document.getElementById('statsContainer').style.display = 'none';
-            document.getElementById('resetBtn').disabled = true;
-            
-            // 重新初始化
-            initializeKeplerGl();
-            
-            updateLoadingState(true, 'Ready for new data', 'Upload CSV file to start visualization');
-            document.querySelectorAll('.error-message, .success-message').forEach(el => el.remove());
+            location.reload();
         }
         
         // 页面初始化
-        document.addEventListener('DOMContentLoaded', async function() {
-            console.log('DOM loaded, initializing application...');
+        document.addEventListener('DOMContentLoaded', function() {
+            debugLog('DOM loaded, starting initialization...');
             
-            // 初始化Kepler.gl
-            const initialized = await initializeKeplerGl();
-            
-            if (initialized) {
-                console.log('Application initialized successfully');
-                
-                // 设置事件监听器
-                document.getElementById('fileInput').addEventListener('change', handleFileSelect);
-                
-                const uploadArea = document.getElementById('uploadArea');
-                uploadArea.addEventListener('dragover', handleDragOver);
-                uploadArea.addEventListener('dragleave', handleDragLeave);
-                uploadArea.addEventListener('drop', handleFileDrop);
-                uploadArea.addEventListener('click', triggerFileUpload);
-                
-                updateLoadingState(true, 'Ready for data upload', 'Upload your express_parcel.csv file to start visualization');
-            } else {
-                updateLoadingState(false);
-                showError('Failed to initialize application. Please refresh the page.');
-            }
+            // 等待一小段时间确保所有脚本加载完成
+            setTimeout(() => {
+                const initialized = initializeKeplerGl();
+                if (initialized) {
+                    // 设置事件监听器
+                    document.getElementById('fileInput').addEventListener('change', handleFileSelect);
+                    
+                    const uploadArea = document.getElementById('uploadArea');
+                    uploadArea.addEventListener('click', triggerFileUpload);
+                    
+                    updateLoadingState(true, 'Ready for data upload', 'Upload a CSV file to start visualization');
+                } else {
+                    updateLoadingState(false);
+                }
+            }, 1000);
         });
         
-        // 全局错误处理
+        // 全局错误捕获
         window.addEventListener('error', function(e) {
-            console.error('Global error:', e);
-            updateLibraryStatus('error', 'Unexpected error occurred');
-        });
-        
-        // 窗口大小变化处理
-        window.addEventListener('resize', function() {
-            if (store) {
-                // 可以在这里添加响应式处理逻辑
-                console.log('Window resized, map should auto-adjust');
-            }
+            debugLog('Global error:', e.error);
         });
     </script>
 </body>
