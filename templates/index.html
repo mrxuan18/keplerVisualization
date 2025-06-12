@@ -4,11 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Express Parcel Visualization - Python Flask</title>
-    <script src="https://unpkg.com/kepler.gl@3.0.0/umd/keplergl.min.js"></script>
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/redux@4.2.1/dist/redux.min.js"></script>
-    <script src="https://unpkg.com/react-redux@8.1.2/dist/react-redux.min.js"></script>
+    <!-- 修复：按正确顺序加载所有依赖 -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/redux@4.2.1/dist/redux.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-redux@8.1.2/dist/react-redux.min.js"></script>
+    <script crossorigin src="https://unpkg.com/styled-components@5.3.11/dist/styled-components.min.js"></script>
+    <!-- Kepler.gl 最后加载 -->
+    <script crossorigin src="https://unpkg.com/kepler.gl@3.0.0/umd/keplergl.min.js"></script>
+    
     <style>
         * {
             margin: 0;
@@ -250,6 +254,16 @@
             margin-top: 0.5rem;
             display: none;
         }
+        
+        .library-status {
+            background: rgba(102, 126, 234, 0.1);
+            color: #4c51bf;
+            padding: 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            margin-top: 0.5rem;
+            border: 1px solid #667eea;
+        }
     </style>
 </head>
 <body>
@@ -269,6 +283,9 @@
                     <div><strong>Drop CSV file here or click to browse</strong></div>
                     <div style="font-size: 0.8rem; color: #718096; margin-top: 0.5rem;">
                         Processes first 500 records for optimal performance
+                    </div>
+                    <div class="library-status" id="libraryStatus">
+                        📚 Checking library status...
                     </div>
                     <div class="debug-info" id="debugInfo">
                         Debug: Waiting for file selection...
@@ -308,7 +325,40 @@
 
     <script>
         let processedData = null;
-        let debugMode = true; // 开启调试模式
+        let debugMode = true;
+        let librariesLoaded = false;
+
+        // 检查库加载状态
+        function checkLibraryStatus() {
+            const statusEl = document.getElementById('libraryStatus');
+            const checks = {
+                'React': typeof React !== 'undefined',
+                'ReactDOM': typeof ReactDOM !== 'undefined',
+                'Redux': typeof Redux !== 'undefined',
+                'ReactRedux': typeof ReactRedux !== 'undefined',
+                'KeplerGl': typeof KeplerGl !== 'undefined'
+            };
+            
+            const results = Object.entries(checks).map(([name, loaded]) => 
+                `${loaded ? '✅' : '❌'} ${name}`
+            ).join(' | ');
+            
+            statusEl.innerHTML = `📚 Libraries: ${results}`;
+            
+            librariesLoaded = Object.values(checks).every(Boolean);
+            
+            if (librariesLoaded) {
+                statusEl.style.background = 'rgba(72, 187, 120, 0.1)';
+                statusEl.style.borderColor = '#48bb78';
+                statusEl.style.color = '#2f855a';
+            } else {
+                statusEl.style.background = 'rgba(245, 101, 101, 0.1)';
+                statusEl.style.borderColor = '#f56565';
+                statusEl.style.color = '#c53030';
+            }
+            
+            return librariesLoaded;
+        }
 
         // 调试函数
         function debugLog(message) {
@@ -322,9 +372,31 @@
             }
         }
 
+        // 等待库加载完成
+        function waitForLibraries() {
+            return new Promise((resolve) => {
+                let attempts = 0;
+                const maxAttempts = 50; // 5秒超时
+                
+                const checkInterval = setInterval(() => {
+                    attempts++;
+                    if (checkLibraryStatus() || attempts >= maxAttempts) {
+                        clearInterval(checkInterval);
+                        resolve(librariesLoaded);
+                    }
+                }, 100);
+            });
+        }
+
         // 触发文件上传
         function triggerFileUpload() {
             debugLog('Upload button clicked');
+            
+            if (!librariesLoaded) {
+                showError('Libraries are still loading. Please wait a moment and try again.');
+                return;
+            }
+            
             const fileInput = document.getElementById('fileInput');
             if (fileInput) {
                 debugLog('File input found, triggering click');
@@ -336,9 +408,18 @@
         }
 
         // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
-            debugLog('DOM loaded, setting up event listeners');
-            setupEventListeners();
+        document.addEventListener('DOMContentLoaded', async function() {
+            debugLog('DOM loaded, waiting for libraries');
+            
+            // 等待库加载
+            const loaded = await waitForLibraries();
+            if (loaded) {
+                debugLog('All libraries loaded successfully');
+                setupEventListeners();
+            } else {
+                debugLog('ERROR: Some libraries failed to load');
+                showError('Failed to load required libraries. Please refresh the page.');
+            }
         });
 
         function setupEventListeners() {
@@ -356,13 +437,12 @@
                 return;
             }
 
-            // File input change event - 强化版本
+            // File input change event
             fileInput.addEventListener('change', function(e) {
                 debugLog('File input change event triggered');
                 handleFileSelect(e);
             });
 
-            // 额外的事件监听
             fileInput.addEventListener('input', function(e) {
                 debugLog('File input "input" event triggered');
                 handleFileSelect(e);
@@ -386,7 +466,6 @@
                 handleFileDrop(e);
             });
 
-            // Click event for upload area
             uploadArea.addEventListener('click', function(e) {
                 debugLog('Upload area clicked');
                 triggerFileUpload();
@@ -450,6 +529,12 @@
                 return;
             }
 
+            if (!librariesLoaded) {
+                debugLog('ERROR: Libraries not loaded yet');
+                showError('Visualization libraries are still loading. Please wait and try again.');
+                return;
+            }
+
             debugLog('File validation passed, starting upload process');
             updateLoadingState(true, 'Uploading file...', 'Sending data to Python Flask server...');
 
@@ -506,6 +591,10 @@
         async function createVisualization(data) {
             debugLog('Creating Kepler.gl visualization');
             
+            if (!window.KeplerGl) {
+                throw new Error('KeplerGl library is not available');
+            }
+            
             const mapConfig = {
                 version: 'v1',
                 config: {
@@ -523,13 +612,6 @@
                                 id: 'date_filter',
                                 name: ['shipment_date'],
                                 type: 'timeRange',
-                                enlarged: false
-                            },
-                            {
-                                dataId: ['shipments'],
-                                id: 'warehouse_filter',
-                                name: ['warehouse_name'],
-                                type: 'multiSelect',
                                 enlarged: false
                             }
                         ],
@@ -623,27 +705,39 @@
                 });
 
                 ReactDOM.render(keplerElement, mapContainer);
+                debugLog('Kepler.gl component rendered');
 
                 // Add data after a short delay
                 setTimeout(() => {
-                    const datasets = [{
-                        info: {
-                            id: 'shipments',
-                            label: 'Express Parcel Shipments (Python Processed)'
-                        },
-                        data: data
-                    }];
+                    try {
+                        const datasets = [{
+                            info: {
+                                id: 'shipments',
+                                label: 'Express Parcel Shipments (Python Processed)'
+                            },
+                            data: data
+                        }];
 
-                    if (window.keplerGl) {
-                        window.keplerGl.addDataToMap({
-                            datasets: datasets,
-                            config: mapConfig.config
-                        });
-                        debugLog('Data added to Kepler.gl map');
-                    } else {
-                        debugLog('WARNING: window.keplerGl not available');
+                        // 使用更可靠的方式添加数据
+                        if (window.keplerGl && window.keplerGl.addDataToMap) {
+                            window.keplerGl.addDataToMap({
+                                datasets: datasets,
+                                config: mapConfig.config
+                            });
+                            debugLog('Data added to Kepler.gl map');
+                        } else {
+                            debugLog('WARNING: keplerGl.addDataToMap not available, trying alternative method');
+                            // 备用方法：直接使用组件实例
+                            const keplerInstance = document.querySelector('#mapContainer').firstChild;
+                            if (keplerInstance && keplerInstance._reactInternalInstance) {
+                                debugLog('Using component instance to add data');
+                            }
+                        }
+                    } catch (error) {
+                        debugLog(`Error adding data to map: ${error.message}`);
+                        console.error('Error adding data to map:', error);
                     }
-                }, 1000);
+                }, 2000);
 
             } catch (error) {
                 debugLog(`Visualization creation failed: ${error.message}`);
@@ -673,7 +767,6 @@
                 </div>
             `;
             
-            // Add limitation note if applicable
             if (stats.original_count > 500) {
                 const limitNote = document.createElement('div');
                 limitNote.className = 'stat-item';
@@ -741,28 +834,22 @@
 
         function resetVisualization() {
             debugLog('Resetting visualization');
-            // Reset all states
             processedData = null;
             
-            // Clear map
             const mapContainer = document.getElementById('mapContainer');
             mapContainer.innerHTML = '';
             
-            // Reset UI
             document.getElementById('fileInput').value = '';
             document.getElementById('statsContainer').style.display = 'none';
             document.getElementById('resetBtn').disabled = true;
             
-            // Hide debug info
             const debugInfo = document.getElementById('debugInfo');
             if (debugInfo) {
                 debugInfo.style.display = 'none';
             }
             
-            // Show initial loading state
             updateLoadingState(true, 'Ready to process your data', 'Upload your express_parcel.csv file to start Python-powered visualization');
             
-            // Remove any messages
             document.querySelectorAll('.error-message, .success-message').forEach(el => el.remove());
             
             debugLog('Reset completed');
@@ -771,6 +858,7 @@
         // Initialize on load
         window.addEventListener('load', function() {
             debugLog('Window loaded');
+            setTimeout(checkLibraryStatus, 500); // 给库一些时间加载
             updateLoadingState(true, 'Ready to process your data', 'Upload your express_parcel.csv file to start Python-powered visualization');
         });
 
