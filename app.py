@@ -1,221 +1,928 @@
-# app.py - Flask Web Application
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, request, jsonify, render_template_string, send_file
 import pandas as pd
 import numpy as np
-import json
+from keplergl import KeplerGl
 import requests
-import io
-import time
+import json
 from datetime import datetime
+import time
+import warnings
 import os
+import tempfile
+import io
+warnings.filterwarnings('ignore')
 
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-# Warehouse mapping configuration
-WAREHOUSE_MAPPING = {
-    'NJ9': {'zipcode': '07114', 'name': 'Newark, NJ', 'color': '#FF6B6B'},
-    'NJ8': {'zipcode': '07201', 'name': 'Elizabeth, NJ', 'color': '#4ECDC4'},
-    'NJ7': {'zipcode': '08817', 'name': 'Edison, NJ', 'color': '#45B7D1'},
-    'NJ-Main': {'zipcode': '07306', 'name': 'Jersey City, NJ', 'color': '#96CEB4'},
-    'TX8828': {'zipcode': '75261', 'name': 'Dallas, TX', 'color': '#FFEAA7'},
-    'TX8829': {'zipcode': '76155', 'name': 'Fort Worth, TX', 'color': '#DDA0DD'},
-    'TX-DFW': {'zipcode': '75063', 'name': 'Irving, TX', 'color': '#98D8C8'},
-    'CA-LA': {'zipcode': '90058', 'name': 'Los Angeles, CA', 'color': '#F7DC6F'},
-    'CA-SF': {'zipcode': '94080', 'name': 'South San Francisco, CA', 'color': '#BB8FCE'},
-    'WNT485': {'zipcode': '90248', 'name': 'Gardena, CA', 'color': '#85C1E9'},
-    'WNT486': {'zipcode': '91761', 'name': 'Ontario, CA', 'color': '#F8C471'},
-    'WNT487': {'zipcode': '92408', 'name': 'San Bernardino, CA', 'color': '#82E0AA'},
-    'IL-CHI': {'zipcode': '60638', 'name': 'Chicago, IL', 'color': '#D7BDE2'},
-    'IL9': {'zipcode': '60106', 'name': 'Bensenville, IL', 'color': '#A9DFBF'},
-    'GA-ATL': {'zipcode': '30349', 'name': 'Atlanta, GA', 'color': '#F9E79F'},
-    'FL-MIA': {'zipcode': '33166', 'name': 'Miami, FL', 'color': '#AED6F1'},
-    'Unknown': {'zipcode': '07114', 'name': 'Unknown Location', 'color': '#BDC3C7'}
-}
+class WarehouseFixedVisualizer:
+    def __init__(self):
+        self.coordinate_cache = {}
+        self.zipcode_api_base = "http://api.zippopotam.us/us/"
+        self.all_data = None
+        self.warehouse_mapping = None
 
-# Global coordinate cache
-coordinate_cache = {}
+    def get_warehouse_mapping(self):
+        """获取warehouse邮编映射"""
+        return {
+            # NJ系列 - 新泽西州
+            'NJ9': '07114',          # Newark, NJ
+            'NJ8': '07201',          # Elizabeth, NJ
+            'NJ7': '08817',          # Edison, NJ
+            'NJ-Main': '07306',      # Jersey City, NJ
+            
+            # TX系列 - 德克萨斯州
+            'TX8828': '75261',       # Dallas, TX
+            'TX8829': '76155',       # Fort Worth, TX
+            'TX-DFW': '75063',       # Irving, TX
+            'TX-Houston': '77032',   # Houston, TX
+            
+            # WNT系列 - West Coast
+            'WNT485': '90248',       # Gardena, CA
+            'WNT486': '91761',       # Ontario, CA
+            'WNT487': '92408',       # San Bernardino, CA
+            
+            # CA系列
+            'CA-LA': '90058',        # Los Angeles, CA
+            'CA-SF': '94080',        # South San Francisco, CA
+            'CA-OAK': '94621',       # Oakland, CA
+            
+            # IL系列
+            'IL-CHI': '60638',       # Chicago, IL
+            'IL9': '60106',          # Bensenville, IL
+            
+            # GA系列
+            'GA-ATL': '30349',       # Atlanta, GA
+            
+            # FL系列
+            'FL-MIA': '33166',       # Miami, FL
+            
+            # 默认
+            'Unknown': '07114',
+            'MAIN': '10001',
+            'NYC-Main': '11378',
+        }
 
-def get_warehouse_info(warehouse_name):
-    """Get warehouse information with automatic fixing"""
-    if not warehouse_name:
-        return WAREHOUSE_MAPPING['Unknown']
-    
-    name = str(warehouse_name).strip()
-    
-    # Direct match
-    if name in WAREHOUSE_MAPPING:
-        return WAREHOUSE_MAPPING[name]
-    
-    # Fuzzy matching
-    name_upper = name.upper()
-    
-    if name_upper.startswith('NJ'):
-        return WAREHOUSE_MAPPING['NJ9']
-    elif name_upper.startswith('TX'):
-        return WAREHOUSE_MAPPING['TX8828']
-    elif name_upper.startswith('CA') or 'LA' in name_upper:
-        return WAREHOUSE_MAPPING['CA-LA']
-    elif name_upper.startswith('WNT'):
-        return WAREHOUSE_MAPPING['WNT485']
-    elif name_upper.startswith('IL') or 'CHI' in name_upper:
-        return WAREHOUSE_MAPPING['IL-CHI']
-    elif 'NYC' in name_upper:
-        return WAREHOUSE_MAPPING['NJ-Main']
-    
-    return WAREHOUSE_MAPPING['Unknown']
+    def get_warehouse_zipcode(self, warehouse_name):
+        """根据warehouse名称获取邮编"""
+        if pd.isna(warehouse_name):
+            return self.warehouse_mapping['Unknown']
+        
+        warehouse_name = str(warehouse_name).strip()
+        
+        # 直接匹配
+        if warehouse_name in self.warehouse_mapping:
+            return self.warehouse_mapping[warehouse_name]
+        
+        # 模糊匹配
+        warehouse_upper = warehouse_name.upper()
+        
+        if warehouse_upper.startswith('NJ'):
+            return self.warehouse_mapping['NJ9']
+        elif warehouse_upper.startswith('TX'):
+            return self.warehouse_mapping['TX8828']
+        elif warehouse_upper.startswith('WNT'):
+            return self.warehouse_mapping['WNT485']
+        elif warehouse_upper.startswith('CA'):
+            return self.warehouse_mapping['CA-LA']
+        elif warehouse_upper.startswith('IL'):
+            return self.warehouse_mapping['IL-CHI']
+        elif 'NYC' in warehouse_upper or 'NEW YORK' in warehouse_upper:
+            return self.warehouse_mapping['NYC-Main']
+        elif 'DALLAS' in warehouse_upper or 'DFW' in warehouse_upper:
+            return self.warehouse_mapping['TX-DFW']
+        elif 'LA' in warehouse_upper or 'LOS ANGELES' in warehouse_upper:
+            return self.warehouse_mapping['CA-LA']
+        
+        return self.warehouse_mapping['Unknown']
 
-def extract_zipcode(zipcode_str):
-    """Extract 5-digit zipcode from string"""
-    if not zipcode_str:
-        return None
-    
-    # Remove all non-digits and take first 5
-    zipcode = ''.join(filter(str.isdigit, str(zipcode_str)))[:5]
-    return zipcode if len(zipcode) == 5 else None
+    def extract_zipcode(self, zipcode_str):
+        """提取5位数邮编"""
+        if pd.isna(zipcode_str):
+            return None
+        zipcode_str = str(zipcode_str).strip()
+        zipcode = ''.join(filter(str.isdigit, zipcode_str))[:5]
+        return zipcode if len(zipcode) == 5 else None
 
-def get_coordinates(zipcode):
-    """Get coordinates for zipcode with caching"""
-    if zipcode in coordinate_cache:
-        return coordinate_cache[zipcode]
-    
-    try:
-        response = requests.get(f'http://api.zippopotam.us/us/{zipcode}', timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            if 'places' in data and len(data['places']) > 0:
-                place = data['places'][0]
-                coords = {
-                    'lat': float(place['latitude']),
-                    'lng': float(place['longitude']),
-                    'city': place['place name'],
-                    'state': place['state abbreviation']
+    def get_coordinates(self, zipcode):
+        """获取邮编坐标"""
+        if not zipcode or zipcode in self.coordinate_cache:
+            return self.coordinate_cache.get(zipcode, (None, None))
+
+        try:
+            url = f"{self.zipcode_api_base}{zipcode}"
+            response = requests.get(url, timeout=5)
+
+            if response.status_code == 200:
+                data = response.json()
+                if 'places' in data and len(data['places']) > 0:
+                    place = data['places'][0]
+                    lat, lng = float(place['latitude']), float(place['longitude'])
+                    self.coordinate_cache[zipcode] = (lat, lng)
+                    print(f"   ✓ {zipcode}: {place['place name']}, {place['state abbreviation']}")
+                    return (lat, lng)
+
+            self.coordinate_cache[zipcode] = (None, None)
+            return (None, None)
+
+        except Exception as e:
+            print(f"   ✗ {zipcode}: API请求失败")
+            self.coordinate_cache[zipcode] = (None, None)
+            return (None, None)
+
+    def process_timestamp(self, timestamp_str):
+        """处理时间戳"""
+        if pd.isna(timestamp_str):
+            return None, None
+
+        try:
+            if isinstance(timestamp_str, str) and '/' in timestamp_str:
+                dt = datetime.strptime(timestamp_str, '%m/%d/%y %H:%M')
+                return dt.strftime('%Y-%m-%d'), dt.strftime('%Y-%m-%d %H:%M:%S')
+            elif isinstance(timestamp_str, (int, float)):
+                if timestamp_str > 1e10:
+                    timestamp_str = timestamp_str / 1000
+                dt = datetime.fromtimestamp(timestamp_str)
+                return dt.strftime('%Y-%m-%d'), dt.strftime('%Y-%m-%d %H:%M:%S')
+        except:
+            pass
+        return None, None
+
+    def process_data(self, df, sample_size=500):
+        """处理数据 - 基于Colab版本优化"""
+        print(f"🔄 开始处理数据，样本大小: {sample_size}")
+        
+        # 初始化映射
+        self.warehouse_mapping = self.get_warehouse_mapping()
+        
+        # 限制数据量
+        df = df.head(sample_size)
+        print(f"📂 原始数据: {len(df)} 行")
+
+        # 修复warehouse邮编
+        print("🔧 修复warehouse邮编...")
+        df['fixed_warehouse_zipcode'] = df['warehouse_name'].apply(self.get_warehouse_zipcode)
+
+        # 显示修复结果
+        warehouse_fix_stats = df.groupby(['warehouse_name', 'fixed_warehouse_zipcode']).size().reset_index(name='count')
+        print("📋 Warehouse邮编修复结果:")
+        for _, row in warehouse_fix_stats.iterrows():
+            print(f"   {row['warehouse_name']} → {row['fixed_warehouse_zipcode']} ({row['count']} 条记录)")
+
+        # 处理时间戳
+        print("⏰ 处理时间戳...")
+        timestamp_results = df['created_time'].apply(self.process_timestamp)
+        df['shipment_date'] = [r[0] for r in timestamp_results]
+        df['shipment_datetime'] = [r[1] for r in timestamp_results]
+
+        # 清洗目的地邮编
+        print("📮 清洗目的地邮编...")
+        df['destination_zipcode'] = df['shipto_postal_code'].apply(self.extract_zipcode)
+
+        # 过滤有效数据
+        valid_df = df[
+            (df['shipment_date'].notna()) &
+            (df['fixed_warehouse_zipcode'].notna()) &
+            (df['destination_zipcode'].notna())
+        ].copy()
+
+        print(f"✅ 有效数据: {len(valid_df)} 行")
+
+        if len(valid_df) == 0:
+            print("❌ 没有有效数据!")
+            return None
+
+        # 显示日期分布
+        date_counts = valid_df['shipment_date'].value_counts().sort_index()
+        print(f"📅 日期分布 ({len(date_counts)} 天):")
+        for date, count in date_counts.items():
+            print(f"   {date}: {count} 笔")
+
+        # 获取所有唯一邮编
+        all_zipcodes = list(set(
+            valid_df['fixed_warehouse_zipcode'].tolist() +
+            valid_df['destination_zipcode'].tolist()
+        ))
+
+        print(f"🌍 获取 {len(all_zipcodes)} 个邮编的坐标...")
+        
+        successful_coords = 0
+        for i, zipcode in enumerate(all_zipcodes):
+            coord = self.get_coordinates(zipcode)
+            if coord != (None, None):
+                successful_coords += 1
+
+            if (i + 1) % 10 == 0:
+                print(f"   进度: {i + 1}/{len(all_zipcodes)} | 成功: {successful_coords}")
+            time.sleep(0.1)  # 避免API限制
+
+        success_rate = successful_coords / len(all_zipcodes) * 100
+        print(f"✅ 坐标获取成功率: {successful_coords}/{len(all_zipcodes)} ({success_rate:.1f}%)")
+
+        # 添加坐标
+        print("📍 添加坐标信息...")
+        valid_df['warehouse_lat'] = valid_df['fixed_warehouse_zipcode'].apply(
+            lambda z: self.coordinate_cache.get(z, (None, None))[0]
+        )
+        valid_df['warehouse_lng'] = valid_df['fixed_warehouse_zipcode'].apply(
+            lambda z: self.coordinate_cache.get(z, (None, None))[1]
+        )
+        valid_df['destination_lat'] = valid_df['destination_zipcode'].apply(
+            lambda z: self.coordinate_cache.get(z, (None, None))[0]
+        )
+        valid_df['destination_lng'] = valid_df['destination_zipcode'].apply(
+            lambda z: self.coordinate_cache.get(z, (None, None))[1]
+        )
+
+        # 最终过滤
+        final_df = valid_df[
+            (valid_df['warehouse_lat'].notna()) &
+            (valid_df['destination_lat'].notna())
+        ].copy()
+
+        print(f"🎯 最终数据（含坐标）: {len(final_df)} 行")
+
+        if len(final_df) == 0:
+            print("❌ 没有数据包含有效坐标!")
+            return None
+
+        # 显示最终统计
+        print(f"📊 最终统计:")
+        final_warehouse_stats = final_df.groupby(['warehouse_name', 'fixed_warehouse_zipcode']).size().reset_index(name='count')
+        print("仓库分布:")
+        for _, row in final_warehouse_stats.iterrows():
+            warehouse_coord = self.coordinate_cache.get(row['fixed_warehouse_zipcode'], (None, None))
+            if warehouse_coord != (None, None):
+                print(f"   {row['warehouse_name']} ({row['fixed_warehouse_zipcode']}): {row['count']} 笔 → 坐标: {warehouse_coord}")
+
+        # 创建Kepler数据集
+        print(f"📋 创建Kepler.gl数据集...")
+        kepler_data = pd.DataFrame({
+            'shipment_id': final_df['id'],
+            'shipment_date': final_df['shipment_date'],
+            'warehouse': final_df['warehouse_name'].fillna('Unknown'),
+            'warehouse_zipcode': final_df['fixed_warehouse_zipcode'],
+            'origin_lat': final_df['warehouse_lat'],
+            'origin_lng': final_df['warehouse_lng'],
+            'dest_lat': final_df['destination_lat'],
+            'dest_lng': final_df['destination_lng'],
+            'dest_zipcode': final_df['destination_zipcode'],
+            'dest_city': final_df['shipto_city'].fillna('Unknown'),
+            'dest_country': final_df['shipto_country_code'].fillna('US'),
+            'carrier': final_df['carrier'].fillna('Unknown'),
+            'business_type': final_df.get('biz_type', pd.Series(['Standard'] * len(final_df))).fillna('Standard'),
+            'weight_kg': final_df.get('gw', pd.Series([1] * len(final_df))).fillna(1),
+            'volume_m3': final_df.get('vol', pd.Series([0.1] * len(final_df))).fillna(0.1),
+            'packages': final_df.get('pkg_num', pd.Series([1] * len(final_df))).fillna(1)
+        })
+
+        # 计算距离
+        kepler_data['distance_km'] = np.sqrt(
+            (kepler_data['dest_lat'] - kepler_data['origin_lat'])**2 +
+            (kepler_data['dest_lng'] - kepler_data['origin_lng'])**2
+        ) * 111
+
+        self.all_data = kepler_data
+        
+        print(f"✅ Kepler数据集创建完成: {len(kepler_data)} 行")
+        print(f"📅 包含日期: {kepler_data['shipment_date'].nunique()} 天")
+        print(f"🏢 包含仓库: {kepler_data['warehouse'].nunique()} 个")
+        print(f"📍 包含目的地: {kepler_data['dest_city'].nunique()} 个")
+
+        return kepler_data
+
+    def create_kepler_config_with_filters(self):
+        """创建包含过滤器的Kepler配置 - 基于Colab版本"""
+        return {
+            'version': 'v1',
+            'config': {
+                'mapState': {
+                    'latitude': 39.8,
+                    'longitude': -95.0,
+                    'zoom': 4,
+                    'pitch': 0,
+                    'bearing': 0
+                },
+                'visState': {
+                    'filters': [
+                        {
+                            'dataId': ['shipments'],
+                            'id': 'date_filter',
+                            'name': ['shipment_date'],
+                            'type': 'timeRange',
+                            'value': [],
+                            'enlarged': True,
+                            'plotType': 'histogram',
+                            'animationWindow': 'free'
+                        }
+                    ],
+                    'layers': [
+                        {
+                            'id': 'arc_layer',
+                            'type': 'arc',
+                            'config': {
+                                'dataId': 'shipments',
+                                'label': 'Shipping Routes',
+                                'color': [255, 0, 0],
+                                'highlightColor': [252, 242, 26, 255],
+                                'columns': {
+                                    'lat0': 'origin_lat',
+                                    'lng0': 'origin_lng',
+                                    'lat1': 'dest_lat',
+                                    'lng1': 'dest_lng'
+                                },
+                                'isVisible': True,
+                                'visConfig': {
+                                    'opacity': 0.8,
+                                    'thickness': 2,
+                                    'colorRange': {
+                                        'name': 'Global Warming',
+                                        'type': 'sequential',
+                                        'category': 'Uber',
+                                        'colors': ['#5A1846', '#900C3F', '#C70039', '#E3611C', '#F1920E', '#FFC300']
+                                    },
+                                    'sizeRange': [1, 8],
+                                    'targetColor': [255, 0, 0]
+                                }
+                            }
+                        },
+                        {
+                            'id': 'warehouse_points',
+                            'type': 'point',
+                            'config': {
+                                'dataId': 'shipments',
+                                'label': 'Warehouses',
+                                'color': [0, 255, 0],
+                                'columns': {
+                                    'lat': 'origin_lat',
+                                    'lng': 'origin_lng'
+                                },
+                                'isVisible': True,
+                                'visConfig': {
+                                    'opacity': 0.9,
+                                    'radius': 15,
+                                    'radiusRange': [10, 30]
+                                }
+                            }
+                        },
+                        {
+                            'id': 'destination_points',
+                            'type': 'point',
+                            'config': {
+                                'dataId': 'shipments',
+                                'label': 'Destinations',
+                                'color': [0, 100, 255],
+                                'columns': {
+                                    'lat': 'dest_lat',
+                                    'lng': 'dest_lng'
+                                },
+                                'isVisible': True,
+                                'visConfig': {
+                                    'opacity': 0.8,
+                                    'radius': 8,
+                                    'radiusRange': [5, 20]
+                                }
+                            }
+                        }
+                    ]
                 }
-                coordinate_cache[zipcode] = coords
-                return coords
-    except Exception as e:
-        print(f"Error getting coordinates for {zipcode}: {e}")
-    
-    coordinate_cache[zipcode] = None
-    return None
+            }
+        }
 
-def calculate_distance(lat1, lng1, lat2, lng2):
-    """Calculate distance between two points in km"""
-    R = 6371  # Earth's radius in km
-    
-    lat1, lng1, lat2, lng2 = map(np.radians, [lat1, lng1, lat2, lng2])
-    dlat = lat2 - lat1
-    dlng = lng2 - lng1
-    
-    a = np.sin(dlat/2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlng/2)**2
-    c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1-a))
-    
-    return round(R * c)
+    def create_kepler_map(self):
+        """创建Kepler.gl地图"""
+        if self.all_data is None:
+            return None
 
-def process_csv_data(csv_content):
-    """Process uploaded CSV data"""
-    try:
-        # Read CSV
-        df = pd.read_csv(io.StringIO(csv_content))
-        
-        # Limit to 500 records for performance
-        original_count = len(df)
-        df = df.head(500)
-        
-        processed_data = []
-        
-        for _, row in df.iterrows():
-            try:
-                # Parse date
-                shipment_date = None
-                if 'created_time' in row and pd.notna(row['created_time']):
-                    date_str = str(row['created_time'])
-                    if '/' in date_str:
-                        try:
-                            # Try parsing MM/DD/YY HH:MM format
-                            parts = date_str.split(' ')[0].split('/')
-                            if len(parts) == 3:
-                                month = parts[0].zfill(2)
-                                day = parts[1].zfill(2)
-                                year = parts[2] if len(parts[2]) == 4 else '20' + parts[2]
-                                shipment_date = f"{year}-{month}-{day}"
-                        except:
-                            shipment_date = '2024-03-15'  # Default
-                
-                # Fix warehouse zipcode
-                warehouse_info = get_warehouse_info(row.get('warehouse_name'))
-                
-                # Extract destination zipcode
-                dest_zipcode = extract_zipcode(row.get('shipto_postal_code'))
-                
-                if warehouse_info and dest_zipcode:
-                    processed_data.append({
-                        'id': row.get('id', len(processed_data) + 1),
-                        'shipment_date': shipment_date or '2024-03-15',
-                        'warehouse_name': row.get('warehouse_name', 'Unknown'),
-                        'warehouse_zipcode': warehouse_info['zipcode'],
-                        'warehouse_display': warehouse_info['name'],
-                        'dest_zipcode': dest_zipcode,
-                        'dest_city': row.get('shipto_city', 'Unknown'),
-                        'dest_state': row.get('shipto_state', ''),
-                        'carrier': row.get('carrier', 'Unknown'),
-                        'business_type': row.get('biz_type', 'Standard'),
-                        'weight_kg': float(row.get('gw', 1)) if pd.notna(row.get('gw')) else 1,
-                        'volume_m3': float(row.get('vol', 0.1)) if pd.notna(row.get('vol')) else 0.1,
-                        'packages': int(row.get('pkg_num', 1)) if pd.notna(row.get('pkg_num')) else 1
-                    })
-            except Exception as e:
-                print(f"Error processing row: {e}")
-                continue
-        
-        return processed_data, original_count
-        
-    except Exception as e:
-        raise Exception(f"CSV processing failed: {str(e)}")
+        print(f"🗺️ 创建包含所有数据的Kepler.gl地图...")
+        print(f"📊 数据总量: {len(self.all_data)} 条运输记录")
 
-def enrich_with_coordinates(data):
-    """Add coordinates to processed data"""
-    # Get unique zipcodes
-    unique_zipcodes = set()
-    for item in data:
-        unique_zipcodes.add(item['warehouse_zipcode'])
-        unique_zipcodes.add(item['dest_zipcode'])
-    
-    # Get coordinates for all zipcodes
-    for zipcode in unique_zipcodes:
-        if zipcode not in coordinate_cache:
-            get_coordinates(zipcode)
-            time.sleep(0.1)  # Rate limiting
-    
-    # Add coordinates to data
-    enriched_data = []
-    for item in data:
-        warehouse_coord = coordinate_cache.get(item['warehouse_zipcode'])
-        dest_coord = coordinate_cache.get(item['dest_zipcode'])
+        config = self.create_kepler_config_with_filters()
+        map_instance = KeplerGl(height=700, width=1200, config=config)
+        map_instance.add_data(data=self.all_data, name='shipments')
         
-        if warehouse_coord and dest_coord:
-            item.update({
-                'origin_lat': warehouse_coord['lat'],
-                'origin_lng': warehouse_coord['lng'],
-                'dest_lat': dest_coord['lat'],
-                'dest_lng': dest_coord['lng'],
-                'distance_km': calculate_distance(
-                    warehouse_coord['lat'], warehouse_coord['lng'],
-                    dest_coord['lat'], dest_coord['lng']
-                )
-            })
-            enriched_data.append(item)
-    
-    return enriched_data
+        return map_instance
+
+# 全局可视化器实例
+visualizer = WarehouseFixedVisualizer()
+
+# HTML模板 - 纯前端，无依赖Kepler.gl库
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Express Parcel Visualization - Python Backend</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            display: grid;
+            grid-template-rows: auto 1fr;
+            height: 100vh;
+        }
+        
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(15px);
+            padding: 1.5rem 2rem;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            border-bottom: 3px solid #667eea;
+        }
+        
+        .header h1 {
+            color: #2d3748;
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .upload-section {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-top: 1rem;
+        }
+        
+        .upload-area {
+            flex: 1;
+            min-width: 300px;
+            border: 2px dashed #cbd5e0;
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0.8);
+            transition: all 0.3s ease;
+        }
+        
+        .upload-area:hover {
+            border-color: #667eea;
+            background: rgba(255, 255, 255, 0.95);
+            transform: translateY(-2px);
+        }
+        
+        .upload-area.dragover {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.1);
+        }
+        
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            transition: all 0.3s ease;
+        }
+        
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .btn-secondary {
+            background: rgba(255,255,255,0.9);
+            color: #4a5568;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .main-content {
+            background: white;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .loading {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            font-size: 1.2rem;
+            color: #4a5568;
+            text-align: center;
+        }
+        
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid #e2e8f0;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error-message, .success-message {
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .error-message {
+            background: rgba(245, 101, 101, 0.1);
+            border: 1px solid #f56565;
+            color: #c53030;
+        }
+        
+        .success-message {
+            background: rgba(72, 187, 120, 0.1);
+            border: 1px solid #48bb78;
+            color: #2f855a;
+        }
+        
+        .stats {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+        
+        .stat-item {
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            color: #2d3748;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        
+        .feature-badge {
+            background: linear-gradient(135deg, #48bb78, #38a169);
+            color: white;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+        
+        .status-indicator {
+            background: rgba(72, 187, 120, 0.1);
+            border: 1px solid #48bb78;
+            color: #2f855a;
+            padding: 0.75rem;
+            border-radius: 8px;
+            margin: 0.5rem 0;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+        
+        .kepler-map-container {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: white;
+        }
+        
+        .ready-state {
+            background: linear-gradient(135deg, #f7fafc, #edf2f7);
+            border: 2px dashed #cbd5e0;
+            border-radius: 12px;
+            padding: 3rem;
+            margin: 2rem;
+            text-align: center;
+            color: #4a5568;
+        }
+        
+        .ready-state h3 {
+            color: #2d3748;
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+        }
+        
+        .feature-list {
+            margin-top: 2rem;
+            text-align: left;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .feature-list li {
+            margin: 0.5rem 0;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+        
+        .feature-list li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #48bb78;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div>
+                    <h1>🗺️ Express Parcel Visualization</h1>
+                    <p>Python Backend with KeplerGL - Warehouse Location Auto-Fixed</p>
+                </div>
+                <div class="feature-badge">Python Backend</div>
+            </div>
+            
+            <div class="status-indicator">
+                ✅ Ready to process your data - No browser dependencies required
+            </div>
+            
+            <div class="upload-section">
+                <div class="upload-area" id="uploadArea">
+                    <div style="font-size: 2rem; color: #667eea; margin-bottom: 0.5rem;">📤</div>
+                    <div><strong>Drop CSV file here or click to browse</strong></div>
+                    <div style="font-size: 0.8rem; color: #718096; margin-top: 0.5rem;">
+                        Automatically fixes warehouse locations based on ID patterns
+                    </div>
+                </div>
+                
+                <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                    <button class="btn" onclick="uploadFile()" id="uploadBtn">
+                        📁 Upload & Visualize
+                    </button>
+                    <button class="btn btn-secondary" onclick="downloadSample()">
+                        📄 Sample Data
+                    </button>
+                    <button class="btn btn-secondary" onclick="resetVisualization()" id="resetBtn" style="display: none;">
+                        🔄 Reset
+                    </button>
+                </div>
+            </div>
+            
+            <div id="stats" class="stats" style="display: none;"></div>
+            <div id="messages"></div>
+            
+            <input type="file" id="fileInput" accept=".csv" style="display: none;">
+        </header>
+
+        <main class="main-content">
+            <div id="mapContent" class="ready-state">
+                <h3>🚀 Express Parcel Logistics Visualization</h3>
+                <p>Upload your express_parcel.csv file to create an interactive map showing shipment flows from warehouses to destinations.</p>
+                
+                <ul class="feature-list">
+                    <li>Automatic warehouse location fixing (NJ, TX, CA, WNT series)</li>
+                    <li>Interactive arc visualization showing shipping routes</li>
+                    <li>Date-based filtering and analysis</li>
+                    <li>Carrier and business type breakdowns</li>
+                    <li>Geographic coordinate geocoding</li>
+                    <li>Real-time data processing and validation</li>
+                </ul>
+                
+                <div style="margin-top: 2rem; font-size: 0.9rem; color: #718096;">
+                    Uses Python KeplerGL backend - no browser library dependencies
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // No library dependency checks - direct functionality
+        
+        function showMessage(message, type) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = type === 'error' ? 'error-message' : 'success-message';
+            messageDiv.innerHTML = (type === 'error' ? '⚠️ ' : '✅ ') + message;
+            messagesDiv.appendChild(messageDiv);
+            setTimeout(() => messageDiv.remove(), 8000);
+        }
+        
+        function updateStats(stats) {
+            const statsDiv = document.getElementById('stats');
+            statsDiv.innerHTML = \`
+                <div class="stat-item">\${stats.total_records} Records</div>
+                <div class="stat-item">\${stats.unique_warehouses} Warehouses</div>
+                <div class="stat-item">\${stats.unique_destinations} Destinations</div>
+                <div class="stat-item">\${stats.date_range}</div>
+            \`;
+            statsDiv.style.display = 'flex';
+        }
+        
+        function showLoading(message, details) {
+            const mapContent = document.getElementById('mapContent');
+            mapContent.innerHTML = \`
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    \${message}<br>
+                    <small>\${details}</small>
+                </div>
+            \`;
+        }
+        
+        async function uploadFile() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showMessage('Please select a CSV file', 'error');
+                return;
+            }
+            
+            if (!file.name.toLowerCase().endsWith('.csv')) {
+                showMessage('Please upload a CSV file', 'error');
+                return;
+            }
+            
+            // Disable upload button during processing
+            document.getElementById('uploadBtn').disabled = true;
+            
+            showLoading('🔄 Processing data and fixing warehouse locations...', 'This may take a few moments depending on data size');
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    if (result.html) {
+                        document.getElementById('mapContent').innerHTML = result.html;
+                        if (result.stats) {
+                            updateStats(result.stats);
+                        }
+                        document.getElementById('resetBtn').style.display = 'block';
+                        showMessage(\`Successfully processed \${result.stats?.total_records || 'unknown'} records with warehouse location fixes!\`, 'success');
+                        
+                        // Show additional info if provided
+                        if (result.message) {
+                            setTimeout(() => {
+                                showMessage(result.message, 'success');
+                            }, 1000);
+                        }
+                    } else {
+                        throw new Error(result.error || 'No visualization generated');
+                    }
+                } else {
+                    throw new Error(result.error || 'Server error');
+                }
+                
+            } catch (error) {
+                document.getElementById('mapContent').innerHTML = \`
+                    <div class="loading">
+                        ❌ Failed to create visualization<br>
+                        <small>Error: \${error.message}</small><br>
+                        <small>Please check your CSV format and try again</small>
+                    </div>
+                \`;
+                showMessage('Processing failed: ' + error.message, 'error');
+            } finally {
+                // Re-enable upload button
+                document.getElementById('uploadBtn').disabled = false;
+            }
+        }
+        
+        async function downloadSample() {
+            try {
+                showMessage('Generating sample CSV...', 'success');
+                const response = await fetch('/api/sample');
+                
+                if (!response.ok) {
+                    throw new Error('Failed to generate sample file');
+                }
+                
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'sample_express_parcel.csv';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                showMessage('Sample CSV downloaded! Contains 20 records with warehouse location examples.', 'success');
+            } catch (error) {
+                showMessage('Failed to download sample data: ' + error.message, 'error');
+            }
+        }
+        
+        function resetVisualization() {
+            // Reset file input
+            document.getElementById('fileInput').value = '';
+            
+            // Hide stats and reset button
+            document.getElementById('stats').style.display = 'none';
+            document.getElementById('resetBtn').style.display = 'none';
+            
+            // Reset map content
+            document.getElementById('mapContent').innerHTML = \`
+                <div class="ready-state">
+                    <h3>🚀 Express Parcel Logistics Visualization</h3>
+                    <p>Upload your express_parcel.csv file to create an interactive map showing shipment flows from warehouses to destinations.</p>
+                    
+                    <ul class="feature-list">
+                        <li>Automatic warehouse location fixing (NJ, TX, CA, WNT series)</li>
+                        <li>Interactive arc visualization showing shipping routes</li>
+                        <li>Date-based filtering and analysis</li>
+                        <li>Carrier and business type breakdowns</li>
+                        <li>Geographic coordinate geocoding</li>
+                        <li>Real-time data processing and validation</li>
+                    </ul>
+                    
+                    <div style="margin-top: 2rem; font-size: 0.9rem; color: #718096;">
+                        Uses Python KeplerGL backend - no browser library dependencies
+                    </div>
+                </div>
+            \`;
+            
+            // Clear messages
+            document.getElementById('messages').innerHTML = '';
+            
+            showMessage('Ready for new visualization', 'success');
+        }
+        
+        // File drag and drop functionality
+        const uploadArea = document.getElementById('uploadArea');
+        
+        uploadArea.addEventListener('click', () => {
+            document.getElementById('fileInput').click();
+        });
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                document.getElementById('fileInput').files = files;
+                uploadFile();
+            }
+        });
+        
+        // File input change handler
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                uploadFile();
+            }
+        });
+        
+        // Page load handler
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Express Parcel Visualization loaded - Python backend ready');
+        });
+    </script>
+</body>
+</html>
+"""
 
 @app.route('/')
 def index():
-    """Main page"""
-    return render_template('index.html')
+    return render_template_string(HTML_TEMPLATE)
 
 @app.route('/api/upload', methods=['POST'])
-def upload_csv():
-    """Handle CSV file upload and processing"""
+def upload_file():
     try:
         if 'file' not in request.files:
             return jsonify({'error': 'No file uploaded'}), 400
@@ -224,83 +931,174 @@ def upload_csv():
         if file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
         
-        if not file.filename.lower().endswith('.csv'):
-            return jsonify({'error': 'Please upload a CSV file'}), 400
+        print("📂 接收到文件上传请求")
         
-        # Read file content
-        csv_content = file.read().decode('utf-8')
-        
-        # Process data
-        processed_data, original_count = process_csv_data(csv_content)
-        
-        if not processed_data:
-            return jsonify({'error': 'No valid data found in CSV'}), 400
-        
-        # Enrich with coordinates
-        enriched_data = enrich_with_coordinates(processed_data)
-        
-        if not enriched_data:
-            return jsonify({'error': 'Could not get coordinates for any locations'}), 400
-        
-        # Generate statistics
-        stats = {
-            'total_records': len(enriched_data),
-            'original_count': original_count,
-            'unique_warehouses': len(set(item['warehouse_name'] for item in enriched_data)),
-            'unique_destinations': len(set(item['dest_city'] for item in enriched_data)),
-            'total_distance': sum(item['distance_km'] for item in enriched_data),
-            'date_range': {
-                'start': min(item['shipment_date'] for item in enriched_data),
-                'end': max(item['shipment_date'] for item in enriched_data)
+        # 保存临时文件
+        with tempfile.NamedTemporaryFile(mode='w+b', suffix='.csv', delete=False) as tmp_file:
+            file.save(tmp_file.name)
+            print(f"📁 文件已保存到临时位置: {tmp_file.name}")
+            
+            # 读取CSV
+            try:
+                df = pd.read_csv(tmp_file.name)
+                print(f"📊 成功读取CSV: {len(df)} 行, {len(df.columns)} 列")
+                print(f"📋 列名: {list(df.columns)}")
+            except Exception as e:
+                return jsonify({'error': f'Failed to read CSV file: {str(e)}'}), 400
+            
+            # 处理数据（使用Colab优化版本）
+            try:
+                processed_data = visualizer.process_data(df, sample_size=500)
+            except Exception as e:
+                print(f"❌ 数据处理失败: {e}")
+                import traceback
+                traceback.print_exc()
+                return jsonify({'error': f'Data processing failed: {str(e)}'}), 500
+            
+            if processed_data is None:
+                return jsonify({'error': 'No valid data found after processing. Please check your CSV format.'}), 400
+            
+            # 创建Kepler地图
+            try:
+                print("🗺️ 创建Kepler.gl地图...")
+                map_instance = visualizer.create_kepler_map()
+                
+                if map_instance is None:
+                    return jsonify({'error': 'Failed to create map visualization'}), 500
+                
+                # 获取HTML
+                map_html = map_instance._repr_html_()
+                print("✅ 地图HTML生成成功")
+                
+            except Exception as e:
+                print(f"❌ 地图创建失败: {e}")
+                import traceback
+                traceback.print_exc()
+                return jsonify({'error': f'Map creation failed: {str(e)}'}), 500
+            
+            # 统计信息
+            stats = {
+                'total_records': len(processed_data),
+                'unique_warehouses': processed_data['warehouse'].nunique(),
+                'unique_destinations': processed_data['dest_city'].nunique(),
+                'date_range': f"{processed_data['shipment_date'].min()} → {processed_data['shipment_date'].max()}"
             }
-        }
-        
-        return jsonify({
-            'success': True,
-            'data': enriched_data,
-            'stats': stats,
-            'message': f'Successfully processed {len(enriched_data)} shipment records'
-        })
-        
+            
+            print(f"📊 统计信息: {stats}")
+            
+            # 清理临时文件
+            try:
+                os.unlink(tmp_file.name)
+                print("🗑️ 临时文件已清理")
+            except:
+                pass
+            
+            return jsonify({
+                'html': map_html,
+                'stats': stats,
+                'message': 'Warehouse locations automatically fixed based on ID patterns'
+            })
+            
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"❌ 上传处理失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Upload processing failed: {str(e)}'}), 500
 
 @app.route('/api/sample')
 def download_sample():
-    """Generate and return sample CSV data"""
-    sample_data = """id,created_time,warehouse_name,shipto_postal_code,shipto_city,shipto_state,shipto_country_code,carrier,biz_type,gw,vol,pkg_num
-1,3/15/24 10:30,NJ9,10001,New York,NY,US,FedEx,Express,2.5,0.01,1
-2,3/15/24 11:45,TX8828,90210,Beverly Hills,CA,US,UPS,Standard,1.8,0.008,1
-3,3/15/24 14:20,CA-LA,60601,Chicago,IL,US,DHL,Express,3.2,0.015,2
-4,3/16/24 09:15,NJ8,33101,Miami,FL,US,FedEx,Standard,2.1,0.012,1
-5,3/16/24 16:30,WNT485,98101,Seattle,WA,US,UPS,Express,4.5,0.025,3
-6,3/17/24 08:45,IL-CHI,02101,Boston,MA,US,USPS,Standard,1.9,0.009,1
-7,3/17/24 13:20,TX8829,30301,Atlanta,GA,US,DHL,Express,3.8,0.018,2
-8,3/18/24 10:15,WNT486,75201,Dallas,TX,US,FedEx,Standard,2.7,0.013,1
-9,3/18/24 15:40,CA-SF,80202,Denver,CO,US,UPS,Express,5.2,0.028,4
-10,3/19/24 11:25,GA-ATL,85001,Phoenix,AZ,US,DHL,Standard,3.1,0.016,2
-11,3/19/24 14:50,NJ7,19101,Philadelphia,PA,US,FedEx,Express,2.3,0.011,1
-12,3/20/24 09:30,FL-MIA,37201,Nashville,TN,US,UPS,Standard,4.1,0.022,3
-13,3/20/24 16:15,IL9,55401,Minneapolis,MN,US,USPS,Express,1.6,0.007,1
-14,3/21/24 12:00,NJ9,97201,Portland,OR,US,DHL,Standard,3.5,0.017,2
-15,3/21/24 17:30,TX8828,63101,St. Louis,MO,US,FedEx,Express,2.9,0.014,1"""
-    
-    from flask import Response
-    return Response(
-        sample_data,
-        mimetype='text/csv',
-        headers={'Content-Disposition': 'attachment; filename=sample_express_parcel.csv'}
-    )
+    """生成并下载样本CSV文件"""
+    try:
+        # 创建样本数据 - 基于真实的express_parcel格式
+        sample_data = {
+            'id': range(1, 21),
+            'warehouse_name': [
+                'NJ9', 'TX8828', 'CA-LA', 'NJ8', 'WNT485',
+                'IL-CHI', 'TX-DFW', 'CA-SF', 'NJ7', 'WNT486',
+                'GA-ATL', 'FL-MIA', 'CA-OAK', 'TX8829', 'IL9',
+                'NYC-Main', 'NJ-Main', 'WNT487', 'TX-Houston', 'CA-LA'
+            ],
+            'created_time': [
+                '1/15/24 10:30', '1/15/24 11:45', '1/16/24 09:15', '1/16/24 14:20', '1/17/24 16:10',
+                '1/17/24 08:45', '1/18/24 13:20', '1/18/24 15:30', '1/19/24 11:15', '1/19/24 17:45',
+                '1/20/24 09:30', '1/20/24 12:15', '1/21/24 10:45', '1/21/24 16:30', '1/22/24 14:15',
+                '1/22/24 11:00', '1/23/24 13:45', '1/23/24 15:15', '1/24/24 09:45', '1/24/24 17:30'
+            ],
+            'shipto_postal_code': [
+                '10001', '90210', '60601', '33101', '98101',
+                '30309', '02101', '19102', '80202', '85001',
+                '89101', '37201', '28201', '23219', '46201',
+                '55401', '53201', '40201', '70112', '84101'
+            ],
+            'shipto_city': [
+                'New York', 'Beverly Hills', 'Chicago', 'Miami', 'Seattle',
+                'Atlanta', 'Boston', 'Philadelphia', 'Denver', 'Phoenix',
+                'Las Vegas', 'Nashville', 'Charlotte', 'Richmond', 'Indianapolis',
+                'Minneapolis', 'Milwaukee', 'Louisville', 'New Orleans', 'Salt Lake City'
+            ],
+            'shipto_country_code': ['US'] * 20,
+            'carrier': [
+                'FedEx', 'UPS', 'DHL', 'USPS', 'Amazon',
+                'FedEx', 'UPS', 'DHL', 'USPS', 'Amazon',
+                'FedEx', 'UPS', 'DHL', 'USPS', 'Amazon',
+                'FedEx', 'UPS', 'DHL', 'USPS', 'Amazon'
+            ],
+            'biz_type': [
+                'Express', 'Standard', 'Economy', 'Express', 'Standard',
+                'Economy', 'Express', 'Standard', 'Economy', 'Express',
+                'Standard', 'Economy', 'Express', 'Standard', 'Economy',
+                'Express', 'Standard', 'Economy', 'Express', 'Standard'
+            ],
+            'gw': [1.5, 2.3, 0.8, 3.2, 1.1, 2.8, 1.9, 0.5, 4.1, 2.6, 
+                   1.8, 3.5, 0.9, 2.4, 1.7, 3.8, 2.1, 1.3, 4.5, 2.9],
+            'vol': [0.05, 0.12, 0.03, 0.18, 0.06, 0.15, 0.08, 0.02, 0.25, 0.14,
+                    0.09, 0.22, 0.04, 0.13, 0.07, 0.28, 0.11, 0.05, 0.31, 0.16],
+            'pkg_num': [1, 1, 2, 1, 3, 1, 2, 1, 1, 2, 
+                       1, 1, 3, 1, 2, 1, 1, 2, 1, 3]
+        }
+        
+        sample_df = pd.DataFrame(sample_data)
+        
+        # 创建CSV字符串
+        csv_buffer = io.StringIO()
+        sample_df.to_csv(csv_buffer, index=False)
+        csv_content = csv_buffer.getvalue()
+        
+        # 创建响应
+        response = app.response_class(
+            csv_content,
+            mimetype='text/csv',
+            headers={'Content-Disposition': 'attachment; filename=sample_express_parcel.csv'}
+        )
+        
+        print("📄 样本CSV文件生成成功")
+        return response
+        
+    except Exception as e:
+        print(f"❌ 样本文件生成失败: {e}")
+        return jsonify({'error': f'Failed to generate sample file: {str(e)}'}), 500
 
-@app.route('/api/health')
+@app.route('/health')
 def health_check():
-    """Health check endpoint"""
+    """健康检查端点"""
     return jsonify({
         'status': 'healthy',
-        'timestamp': datetime.now().isoformat(),
-        'cache_size': len(coordinate_cache)
+        'service': 'Express Parcel Visualization',
+        'version': '1.0.0',
+        'features': ['warehouse_location_fix', 'kepler_visualization', 'zipcode_geocoding']
     })
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    print("🚀 启动 Express Parcel Visualization 服务器")
+    print("📍 Warehouse位置自动修复功能已启用")
+    print("🗺️ 使用Python KeplerGL后端渲染")
+    print("=" * 60)
+    print("🔧 特性:")
+    print("   • 自动修复warehouse邮编（基于ID模式）")
+    print("   • 智能地理编码（API + 缓存）")
+    print("   • 交互式Kepler.gl可视化")
+    print("   • 数据清洗和验证")
+    print("   • 响应式Web界面")
+    print("=" * 60)
+    
+    app.run(debug=True, host='0.0.0.0', port=5000)
