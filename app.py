@@ -748,13 +748,25 @@ HTML_TEMPLATE = """
             \`;
         }
         
+        function triggerFileSelection() {
+            console.log('triggerFileSelection called');
+            const fileInput = document.getElementById('fileInput');
+            console.log('fileInput element:', fileInput);
+            if (fileInput) {
+                fileInput.click();
+                console.log('fileInput.click() called');
+            } else {
+                console.error('fileInput element not found');
+            }
+        }
+        
         async function uploadFile() {
+            console.log('uploadFile called');
             const fileInput = document.getElementById('fileInput');
             const file = fileInput.files[0];
             
             if (!file) {
-                // 如果没有选择文件，触发文件选择对话框
-                fileInput.click();
+                showMessage('No file selected', 'error');
                 return;
             }
             
@@ -762,6 +774,8 @@ HTML_TEMPLATE = """
                 showMessage('Please upload a CSV file', 'error');
                 return;
             }
+            
+            console.log('Processing file:', file.name);
             
             // Disable upload button during processing
             document.getElementById('uploadBtn').disabled = true;
@@ -814,10 +828,6 @@ HTML_TEMPLATE = """
                 // Re-enable upload button
                 document.getElementById('uploadBtn').disabled = false;
             }
-        }
-        
-        function triggerFileSelection() {
-            document.getElementById('fileInput').click();
         }
         
         async function downloadSample() {
@@ -881,10 +891,14 @@ HTML_TEMPLATE = """
         
         // File drag and drop functionality
         const uploadArea = document.getElementById('uploadArea');
-        const fileInput = document.getElementById('fileInput');
         
-        uploadArea.addEventListener('click', () => {
-            fileInput.click();
+        uploadArea.addEventListener('click', function() {
+            console.log('Upload area clicked');
+            const fileInput = document.getElementById('fileInput');
+            if (fileInput) {
+                fileInput.click();
+                console.log('File input clicked via upload area');
+            }
         });
         
         uploadArea.addEventListener('dragover', (e) => {
@@ -902,29 +916,59 @@ HTML_TEMPLATE = """
             
             const files = e.dataTransfer.files;
             if (files.length > 0) {
+                const fileInput = document.getElementById('fileInput');
                 fileInput.files = files;
-                // Automatically process the file when dropped
-                uploadFile();
-            }
-        });
-        
-        // File input change handler - 关键修复！
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                // 更新按钮文本
-                document.getElementById('uploadBtn').innerHTML = '🔄 Process & Visualize';
-                document.getElementById('uploadBtn').onclick = uploadFile;
                 
-                // 显示选择的文件名
-                const fileName = e.target.files[0].name;
-                showMessage(\`File selected: \${fileName}. Click "Process & Visualize" to continue.\`, 'success');
+                // Trigger the change event manually
+                const event = new Event('change', { bubbles: true });
+                fileInput.dispatchEvent(event);
+                
+                // Automatically process the file when dropped
+                setTimeout(() => {
+                    uploadFile();
+                }, 500);
             }
         });
         
         // Page load handler
         document.addEventListener('DOMContentLoaded', function() {
             console.log('Express Parcel Visualization loaded - Python backend ready');
+            
+            // Test file input availability
+            const fileInput = document.getElementById('fileInput');
+            console.log('File input found:', !!fileInput);
+            
+            // Test button functionality
+            const uploadBtn = document.getElementById('uploadBtn');
+            console.log('Upload button found:', !!uploadBtn);
+            
+            // Ensure file input works
+            if (fileInput) {
+                fileInput.addEventListener('change', handleFileSelection);
+                console.log('File input change listener added');
+            }
+            
+            // Test click handler
+            if (uploadBtn) {
+                console.log('Upload button onclick:', uploadBtn.onclick);
+            }
         });
+        
+        function handleFileSelection(e) {
+            console.log('File selection changed');
+            if (e.target.files.length > 0) {
+                const file = e.target.files[0];
+                console.log('File selected:', file.name);
+                
+                // 更新按钮文本和功能
+                const uploadBtn = document.getElementById('uploadBtn');
+                uploadBtn.innerHTML = '🔄 Process & Visualize';
+                uploadBtn.onclick = uploadFile;
+                
+                // 显示选择的文件名
+                showMessage(\`File selected: \${file.name}. Click "Process & Visualize" to continue.\`, 'success');
+            }
+        }
     </script>
 </body>
 </html>
