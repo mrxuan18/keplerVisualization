@@ -675,8 +675,8 @@ HTML_TEMPLATE = """
                 </div>
                 
                 <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-                    <button class="btn" onclick="uploadFile()" id="uploadBtn">
-                        📁 Upload & Visualize
+                    <button class="btn" onclick="triggerFileSelection()" id="uploadBtn">
+                        📁 Select CSV File
                     </button>
                     <button class="btn btn-secondary" onclick="downloadSample()">
                         📄 Sample Data
@@ -753,7 +753,8 @@ HTML_TEMPLATE = """
             const file = fileInput.files[0];
             
             if (!file) {
-                showMessage('Please select a CSV file', 'error');
+                // 如果没有选择文件，触发文件选择对话框
+                fileInput.click();
                 return;
             }
             
@@ -813,6 +814,10 @@ HTML_TEMPLATE = """
                 // Re-enable upload button
                 document.getElementById('uploadBtn').disabled = false;
             }
+        }
+        
+        function triggerFileSelection() {
+            document.getElementById('fileInput').click();
         }
         
         async function downloadSample() {
@@ -876,9 +881,10 @@ HTML_TEMPLATE = """
         
         // File drag and drop functionality
         const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
         
         uploadArea.addEventListener('click', () => {
-            document.getElementById('fileInput').click();
+            fileInput.click();
         });
         
         uploadArea.addEventListener('dragover', (e) => {
@@ -896,15 +902,22 @@ HTML_TEMPLATE = """
             
             const files = e.dataTransfer.files;
             if (files.length > 0) {
-                document.getElementById('fileInput').files = files;
+                fileInput.files = files;
+                // Automatically process the file when dropped
                 uploadFile();
             }
         });
         
-        // File input change handler
-        document.getElementById('fileInput').addEventListener('change', (e) => {
+        // File input change handler - 关键修复！
+        fileInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
-                uploadFile();
+                // 更新按钮文本
+                document.getElementById('uploadBtn').innerHTML = '🔄 Process & Visualize';
+                document.getElementById('uploadBtn').onclick = uploadFile;
+                
+                // 显示选择的文件名
+                const fileName = e.target.files[0].name;
+                showMessage(\`File selected: \${fileName}. Click "Process & Visualize" to continue.\`, 'success');
             }
         });
         
