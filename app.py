@@ -455,20 +455,167 @@ class WarehouseFixedVisualizer:
         for _, row in warehouse_stats.iterrows():
             print(f"   {row['warehouse']} ({row['warehouse_zipcode']}): {row['count']} 笔")
 
-        # 创建地图
-        config = self.create_kepler_config_with_filters()
-        map_instance = KeplerGl(height=700, width=1200, config=config)
-        map_instance.add_data(data=self.all_data, name='shipments')
+        try:
+            # 尝试使用标准方法创建地图
+            config = self.create_kepler_config_with_filters()
+            map_instance = KeplerGl(height=700, width=1200, config=config)
+            map_instance.add_data(data=self.all_data, name='shipments')
 
-        print(f"\n✅ 地图创建完成!")
-        print(f"🎛️ 使用方法:")
-        print(f"   1. 地图显示所有仓库到目的地的运输路线")
-        print(f"   2. 绿色圆点 = 仓库位置（基于修复的邮编）")
-        print(f"   3. 蓝色圆点 = 目的地位置")
-        print(f"   4. 红色弧线 = 运输路线")
-        print(f"   5. 点击 'Filters' 添加日期、仓库、承运商等过滤器")
+            print(f"\n✅ 地图创建完成!")
+            print(f"🎛️ 使用方法:")
+            print(f"   1. 地图显示所有仓库到目的地的运输路线")
+            print(f"   2. 绿色圆点 = 仓库位置（基于修复的邮编）")
+            print(f"   3. 蓝色圆点 = 目的地位置")
+            print(f"   4. 红色弧线 = 运输路线")
+            print(f"   5. 点击 'Filters' 添加日期、仓库、承运商等过滤器")
 
-        return map_instance
+            return map_instance
+            
+        except Exception as e:
+            print(f"⚠️ 标准地图创建失败，使用备用方案: {e}")
+            return "STANDALONE_HTML"  # 标记使用独立HTML
+        """创建独立的Kepler.gl HTML（备用方案）"""
+        if self.all_data is None:
+            return None
+            
+        # 将数据转换为JSON
+        data_json = self.all_data.to_json(orient='records')
+        
+        html_template = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Express Parcel Visualization</title>
+    <script src="https://unpkg.com/react@16/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@16/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/redux@3.7.2/dist/redux.js"></script>
+    <script src="https://unpkg.com/react-redux@5.1.1/dist/react-redux.min.js"></script>
+    <script src="https://unpkg.com/kepler.gl@2.5.5/umd/keplergl.min.js"></script>
+    <style>
+        body {{
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }}
+        #app {{
+            position: absolute;
+            width: 100%;
+            height: 100vh;
+        }}
+        .loading {{
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-size: 18px;
+            color: #666;
+        }}
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="loading">Loading Kepler.gl visualization...</div>
+    </div>
+    
+    <script>
+        const data = {data_json};
+        
+        // 配置
+        const config = {{
+            version: 'v1',
+            config: {{
+                mapState: {{
+                    latitude: 39.8,
+                    longitude: -95.0,
+                    zoom: 4
+                }},
+                visState: {{
+                    layers: [
+                        {{
+                            id: 'arc_layer',
+                            type: 'arc',
+                            config: {{
+                                dataId: 'shipments',
+                                columns: {{
+                                    lat0: 'origin_lat',
+                                    lng0: 'origin_lng',
+                                    lat1: 'dest_lat',
+                                    lng1: 'dest_lng'
+                                }},
+                                isVisible: true,
+                                visConfig: {{
+                                    opacity: 0.8,
+                                    thickness: 2
+                                }}
+                            }}
+                        }},
+                        {{
+                            id: 'warehouse_points',
+                            type: 'point',
+                            config: {{
+                                dataId: 'shipments',
+                                columns: {{
+                                    lat: 'origin_lat',
+                                    lng: 'origin_lng'
+                                }},
+                                color: [0, 255, 0],
+                                isVisible: true,
+                                visConfig: {{
+                                    radius: 15
+                                }}
+                            }}
+                        }}
+                    ]
+                }}
+            }}
+        }};
+        
+        // 创建应用
+        const reducer = Redux.combineReducers({{
+            keplerGl: KeplerGl.keplerGlReducer
+        }});
+        
+        const store = Redux.createStore(reducer);
+        
+        const KeplerGlComponent = KeplerGl.default || KeplerGl;
+        
+        const ConnectedKeplerGl = ReactRedux.connect(
+            state => state,
+            dispatch => ({{ dispatch }})
+        )(KeplerGlComponent);
+        
+        const app = React.createElement(
+            ReactRedux.Provider,
+            {{ store: store }},
+            React.createElement(ConnectedKeplerGl, {{
+                id: 'map',
+                width: window.innerWidth,
+                height: window.innerHeight,
+                mapboxApiAccessToken: 'pk.eyJ1IjoieXV4dWFsYW4iLCJhIjoiY21idG03YmZlMDR2bDJxcHVoZjRjY2l2ciJ9.7NP8FWPFIAWtr7rLkhlc1A'
+            }})
+        );
+        
+        ReactDOM.render(app, document.getElementById('app'));
+        
+        // 添加数据
+        setTimeout(() => {{
+            const addDataAction = KeplerGl.addDataToMap({{
+                datasets: {{
+                    info: {{ id: 'shipments', label: 'Express Parcel Shipments' }},
+                    data: data
+                }},
+                config: config,
+                options: {{ centerMap: true }}
+            }});
+            store.dispatch(addDataAction);
+        }}, 1000);
+    </script>
+</body>
+</html>
+        """
+        
+        return html_template
 
 # 全局可视化器实例
 visualizer = WarehouseFixedVisualizer()
@@ -555,9 +702,35 @@ def process_data():
             if map_instance is None:
                 return jsonify({'error': 'Failed to create map visualization'}), 500
             
-            # 获取HTML
-            map_html = map_instance._repr_html_()
+            # 检查是否需要使用备用HTML
+            if map_instance == "STANDALONE_HTML":
+                print("📋 使用独立HTML方案...")
+                map_html = visualizer.create_standalone_kepler_html()
+            else:
+                # 获取HTML并确保包含所有必要的依赖
+                map_html = map_instance._repr_html_()
+                
+                # 检查并修复HTML，确保包含必要的样式和脚本
+                if '<head>' in map_html and 'kepler.gl' in map_html:
+                    # 添加额外的样式确保地图正确显示
+                    additional_styles = """
+                    <style>
+                        .kepler-gl .side-panel--container {
+                            display: block !important;
+                        }
+                        .kepler-gl .map-container {
+                            position: relative !important;
+                        }
+                        .kepler-gl {
+                            height: 700px !important;
+                            width: 100% !important;
+                        }
+                    </style>
+                    """
+                    map_html = map_html.replace('</head>', additional_styles + '</head>')
+            
             print("✅ 地图HTML生成成功")
+            print(f"📊 HTML大小: {len(map_html)} 字符")
             
         except Exception as e:
             print(f"❌ 地图创建失败: {e}")
