@@ -429,6 +429,11 @@
                         updateProgress(25, 'Parsing CSV data...');
                         const csvText = e.target.result;
                         const lines = csvText.split('\n');
+                        
+                        if (lines.length < 2) {
+                            throw new Error('CSV file must have at least a header row and one data row');
+                        }
+                        
                         const headers = lines[0].split(',').map(h => h.trim().replace(/['"]/g, ''));
                         
                         debugLog('CSV headers found', headers);
@@ -440,7 +445,18 @@
                                 if (values.length === headers.length) {
                                     const row = {};
                                     headers.forEach((header, index) => {
-                                        row[header] = values[index];
+                                        // 清洗数据，确保是有效的JSON值
+                                        let value = values[index];
+                                        
+                                        // 移除多余的引号和空白
+                                        if (typeof value === 'string') {
+                                            value = value.trim();
+                                            if (value === '' || value.toLowerCase() === 'null' || value.toLowerCase() === 'none') {
+                                                value = null;
+                                            }
+                                        }
+                                        
+                                        row[header] = value;
                                     });
                                     data.push(row);
                                 }
@@ -449,6 +465,12 @@
                         
                         updateProgress(50, 'CSV parsing complete');
                         debugLog('CSV parsed successfully', { rows: data.length, headers: headers.length });
+                        
+                        // 验证数据
+                        if (data.length === 0) {
+                            throw new Error('No valid data rows found in CSV file');
+                        }
+                        
                         resolve({ headers, data });
                     } catch (error) {
                         debugLog('CSV parsing error', error);
@@ -458,10 +480,10 @@
                 
                 reader.onerror = () => {
                     debugLog('FileReader error', reader.error);
-                    reject(reader.error);
+                    reject(new Error('Failed to read file'));
                 };
                 
-                reader.readAsText(file);
+                reader.readAsText(file, 'utf-8'); // 明确指定编码
             });
         }
         

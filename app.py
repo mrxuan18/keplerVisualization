@@ -430,9 +430,26 @@ def process_data():
         if not csv_data:
             return jsonify({'error': 'No data to process'}), 400
         
-        # 将JSON数据转换为DataFrame
+        # 将JSON数据转换为DataFrame - 添加数据清洗
         try:
-            df = pd.DataFrame(csv_data)
+            # 清洗数据，确保所有值都是可序列化的
+            cleaned_data = []
+            for row in csv_data:
+                cleaned_row = {}
+                for key, value in row.items():
+                    # 处理各种数据类型
+                    if isinstance(value, bytes):
+                        cleaned_row[key] = value.decode('utf-8', errors='ignore')
+                    elif value is None:
+                        cleaned_row[key] = ''
+                    elif isinstance(value, (int, float, str, bool)):
+                        cleaned_row[key] = value
+                    else:
+                        # 将其他类型转换为字符串
+                        cleaned_row[key] = str(value)
+                cleaned_data.append(cleaned_row)
+            
+            df = pd.DataFrame(cleaned_data)
             print(f"✅ DataFrame创建成功: {len(df)} 行")
             
             # 检查必要的列
@@ -446,6 +463,8 @@ def process_data():
             
         except Exception as e:
             print(f"❌ DataFrame创建失败: {e}")
+            import traceback
+            traceback.print_exc()
             return jsonify({'error': f'Failed to create DataFrame: {str(e)}'}), 400
         
         # 处理数据
@@ -478,15 +497,25 @@ def process_data():
             traceback.print_exc()
             return jsonify({'error': f'Map creation failed: {str(e)}'}), 500
         
-        # 统计信息
-        stats = {
-            'total_records': len(processed_data),
-            'unique_warehouses': processed_data['warehouse'].nunique(),
-            'unique_destinations': processed_data['dest_city'].nunique(),
-            'date_range': f"{processed_data['shipment_date'].min()} → {processed_data['shipment_date'].max()}"
-        }
-        
-        print(f"📊 统计信息: {stats}")
+        # 统计信息 - 确保所有值都是可序列化的
+        try:
+            stats = {
+                'total_records': int(len(processed_data)),
+                'unique_warehouses': int(processed_data['warehouse'].nunique()),
+                'unique_destinations': int(processed_data['dest_city'].nunique()),
+                'date_range': f"{str(processed_data['shipment_date'].min())} → {str(processed_data['shipment_date'].max())}"
+            }
+            
+            print(f"📊 统计信息: {stats}")
+            
+        except Exception as e:
+            print(f"❌ 统计信息生成失败: {e}")
+            stats = {
+                'total_records': len(processed_data),
+                'unique_warehouses': 0,
+                'unique_destinations': 0,
+                'date_range': 'Unknown'
+            }
         
         return jsonify({
             'html': map_html,
