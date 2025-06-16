@@ -339,9 +339,7 @@ class WarehouseFixedVisualizer:
         print(f"🏢 包含仓库: {kepler_data['warehouse'].nunique()} 个")
         print(f"📍 包含目的地: {kepler_data['dest_city'].nunique()} 个")
 
-        return kepler_data日期: {kepler_data['shipment_date'].nunique()} 天")
-        print(f"🏢 包含仓库: {kepler_data['warehouse'].nunique()} 个")
-        print(f"📍 包含目的地: {kepler_data['dest_city'].nunique()} 个")
+        return kepler_data
 
         return kepler_data
 
