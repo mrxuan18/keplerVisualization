@@ -481,13 +481,10 @@ def index():
 def process_data():
     """处理前端发送的JSON数据"""
     try:
-        print("🔵 开始处理API请求...")
-        
         # 获取JSON数据
         data = request.get_json()
         
         if not data:
-            print("❌ 没有接收到数据")
             return jsonify({'error': 'No data received'}), 400
         
         filename = data.get('filename', 'unknown.csv')
@@ -499,32 +496,26 @@ def process_data():
         print(f"📋 列名: {headers}")
         
         if not csv_data:
-            print("❌ 数据为空")
             return jsonify({'error': 'No data to process'}), 400
         
         # 将JSON数据转换为DataFrame - 添加数据清洗
         try:
-            print("🔧 开始清洗数据...")
             # 清洗数据，确保所有值都是可序列化的
             cleaned_data = []
-            for i, row in enumerate(csv_data):
-                try:
-                    cleaned_row = {}
-                    for key, value in row.items():
-                        # 处理各种数据类型
-                        if isinstance(value, bytes):
-                            cleaned_row[key] = value.decode('utf-8', errors='ignore')
-                        elif value is None:
-                            cleaned_row[key] = ''
-                        elif isinstance(value, (int, float, str, bool)):
-                            cleaned_row[key] = value
-                        else:
-                            # 将其他类型转换为字符串
-                            cleaned_row[key] = str(value)
-                    cleaned_data.append(cleaned_row)
-                except Exception as row_error:
-                    print(f"⚠️ 跳过第{i+1}行，数据错误: {row_error}")
-                    continue
+            for row in csv_data:
+                cleaned_row = {}
+                for key, value in row.items():
+                    # 处理各种数据类型
+                    if isinstance(value, bytes):
+                        cleaned_row[key] = value.decode('utf-8', errors='ignore')
+                    elif value is None:
+                        cleaned_row[key] = ''
+                    elif isinstance(value, (int, float, str, bool)):
+                        cleaned_row[key] = value
+                    else:
+                        # 将其他类型转换为字符串
+                        cleaned_row[key] = str(value)
+                cleaned_data.append(cleaned_row)
             
             df = pd.DataFrame(cleaned_data)
             print(f"✅ DataFrame创建成功: {len(df)} 行")
@@ -534,50 +525,38 @@ def process_data():
             missing_columns = [col for col in required_columns if col not in df.columns]
             
             if missing_columns:
-                error_msg = f'Missing required columns: {missing_columns}. Available columns: {list(df.columns)}'
-                print(f"❌ {error_msg}")
-                return jsonify({'error': error_msg}), 400
+                return jsonify({
+                    'error': f'Missing required columns: {missing_columns}. Available columns: {list(df.columns)}'
+                }), 400
             
         except Exception as e:
             print(f"❌ DataFrame创建失败: {e}")
             import traceback
             traceback.print_exc()
-            return jsonify({'error': f'Failed to create DataFrame: {str(e)}'}), 500
+            return jsonify({'error': f'Failed to create DataFrame: {str(e)}'}), 400
         
         # 处理数据
         try:
-            print("🔄 开始数据处理...")
             processed_data = visualizer.process_data(df, sample_size=200)
-            
-            if processed_data is None:
-                print("❌ 数据处理后无有效数据")
-                return jsonify({'error': 'No valid data found after processing. Please check your CSV format.'}), 400
-                
-            print(f"✅ 数据处理完成: {len(processed_data)} 行")
-            
         except Exception as e:
             print(f"❌ 数据处理失败: {e}")
             import traceback
             traceback.print_exc()
             return jsonify({'error': f'Data processing failed: {str(e)}'}), 500
         
+        if processed_data is None:
+            return jsonify({'error': 'No valid data found after processing. Please check your CSV format.'}), 400
+        
         # 创建Kepler地图
         try:
-            print("🗺️ 开始创建Kepler.gl地图...")
+            print("🗺️ 创建Kepler.gl地图...")
             map_instance = visualizer.create_kepler_map()
             
             if map_instance is None:
-                print("❌ 地图实例创建失败")
                 return jsonify({'error': 'Failed to create map visualization'}), 500
             
             # 获取HTML
-            print("📄 生成HTML...")
             map_html = map_instance._repr_html_()
-            
-            if not map_html:
-                print("❌ HTML生成失败")
-                return jsonify({'error': 'Failed to generate map HTML'}), 500
-                
             print("✅ 地图HTML生成成功")
             
         except Exception as e:
@@ -588,7 +567,6 @@ def process_data():
         
         # 统计信息 - 确保所有值都是可序列化的
         try:
-            print("📊 生成统计信息...")
             stats = {
                 'total_records': int(len(processed_data)),
                 'unique_warehouses': int(processed_data['warehouse'].nunique()),
@@ -601,33 +579,23 @@ def process_data():
         except Exception as e:
             print(f"❌ 统计信息生成失败: {e}")
             stats = {
-                'total_records': len(processed_data) if processed_data is not None else 0,
+                'total_records': len(processed_data),
                 'unique_warehouses': 0,
                 'unique_destinations': 0,
                 'date_range': 'Unknown'
             }
         
-        # 构建响应
-        response_data = {
+        return jsonify({
             'html': map_html,
             'stats': stats,
             'message': 'Data processed successfully using frontend CSV parsing + backend visualization'
-        }
-        
-        print("✅ 响应数据准备完成")
-        return jsonify(response_data)
+        })
         
     except Exception as e:
-        print(f"❌ 全局错误: {e}")
+        print(f"❌ 数据处理失败: {e}")
         import traceback
         traceback.print_exc()
-        
-        # 确保始终返回有效的JSON响应
-        error_response = {
-            'error': f'Processing failed: {str(e)}',
-            'type': 'server_error'
-        }
-        return jsonify(error_response), 500
+        return jsonify({'error': f'Processing failed: {str(e)}'}), 500
 
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
