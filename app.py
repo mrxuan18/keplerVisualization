@@ -760,6 +760,64 @@ HTML_TEMPLATE = """
             }
         }
         
+        // 前端读取CSV文件
+        function readCSVFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const csvText = e.target.result;
+                        const lines = csvText.split('\n');
+                        const headers = lines[0].split(',').map(h => h.trim().replace(/['"]/g, ''));
+                        
+                        const data = [];
+                        for (let i = 1; i < lines.length; i++) {
+                            if (lines[i].trim()) {
+                                const values = parseCSVLine(lines[i]);
+                                if (values.length === headers.length) {
+                                    const row = {};
+                                    headers.forEach((header, index) => {
+                                        row[header] = values[index];
+                                    });
+                                    data.push(row);
+                                }
+                            }
+                        }
+                        
+                        console.log('CSV parsed successfully:', data.length, 'rows');
+                        resolve({ headers, data });
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                reader.onerror = reject;
+                reader.readAsText(file);
+            });
+        }
+        
+        // 简单的CSV行解析（处理引号内的逗号）
+        function parseCSVLine(line) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current.trim().replace(/^["']|["']$/g, ''));
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            
+            result.push(current.trim().replace(/^["']|["']$/g, ''));
+            return result;
+        }
+        
         async function uploadFile() {
             console.log('uploadFile called');
             const fileInput = document.getElementById('fileInput');
@@ -780,15 +838,26 @@ HTML_TEMPLATE = """
             // Disable upload button during processing
             document.getElementById('uploadBtn').disabled = true;
             
-            showLoading('🔄 Processing data and fixing warehouse locations...', 'This may take a few moments depending on data size');
-            
-            const formData = new FormData();
-            formData.append('file', file);
+            showLoading('📖 Reading CSV file...', 'Parsing data in browser');
             
             try {
-                const response = await fetch('/api/upload', {
+                // 前端读取CSV文件
+                const csvData = await readCSVFile(file);
+                console.log('CSV data:', csvData);
+                
+                showLoading('🔄 Processing data and fixing warehouse locations...', 'Sending data to Python backend for visualization');
+                
+                // 发送解析后的数据到后端
+                const response = await fetch('/api/process-data', {
                     method: 'POST',
-                    body: formData
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        filename: file.name,
+                        headers: csvData.headers,
+                        data: csvData.data.slice(0, 500) // 限制前500行
+                    })
                 });
                 
                 const result = await response.json();
@@ -978,8 +1047,100 @@ HTML_TEMPLATE = """
 def index():
     return render_template_string(HTML_TEMPLATE)
 
+@app.route('/api/process-data', methods=['POST'])
+def process_data():
+    """处理前端发送的JSON数据"""
+    try:
+        # 获取JSON数据
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'No data received'}), 400
+        
+        filename = data.get('filename', 'unknown.csv')
+        headers = data.get('headers', [])
+        csv_data = data.get('data', [])
+        
+        print(f"📂 接收到数据处理请求: {filename}")
+        print(f"📊 数据: {len(csv_data)} 行, {len(headers)} 列")
+        print(f"📋 列名: {headers}")
+        
+        if not csv_data:
+            return jsonify({'error': 'No data to process'}), 400
+        
+        # 将JSON数据转换为DataFrame
+        try:
+            df = pd.DataFrame(csv_data)
+            print(f"✅ DataFrame创建成功: {len(df)} 行")
+            
+            # 检查必要的列
+            required_columns = ['warehouse_name', 'created_time', 'shipto_postal_code']
+            missing_columns = [col for col in required_columns if col not in df.columns]
+            
+            if missing_columns:
+                return jsonify({
+                    'error': f'Missing required columns: {missing_columns}. Available columns: {list(df.columns)}'
+                }), 400
+            
+        except Exception as e:
+            print(f"❌ DataFrame创建失败: {e}")
+            return jsonify({'error': f'Failed to create DataFrame: {str(e)}'}), 400
+        
+        # 处理数据（使用现有的处理逻辑）
+        try:
+            processed_data = visualizer.process_data(df, sample_size=500)
+        except Exception as e:
+            print(f"❌ 数据处理失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': f'Data processing failed: {str(e)}'}), 500
+        
+        if processed_data is None:
+            return jsonify({'error': 'No valid data found after processing. Please check your CSV format.'}), 400
+        
+        # 创建Kepler地图
+        try:
+            print("🗺️ 创建Kepler.gl地图...")
+            map_instance = visualizer.create_kepler_map()
+            
+            if map_instance is None:
+                return jsonify({'error': 'Failed to create map visualization'}), 500
+            
+            # 获取HTML
+            map_html = map_instance._repr_html_()
+            print("✅ 地图HTML生成成功")
+            
+        except Exception as e:
+            print(f"❌ 地图创建失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': f'Map creation failed: {str(e)}'}), 500
+        
+        # 统计信息
+        stats = {
+            'total_records': len(processed_data),
+            'unique_warehouses': processed_data['warehouse'].nunique(),
+            'unique_destinations': processed_data['dest_city'].nunique(),
+            'date_range': f"{processed_data['shipment_date'].min()} → {processed_data['shipment_date'].max()}"
+        }
+        
+        print(f"📊 统计信息: {stats}")
+        
+        return jsonify({
+            'html': map_html,
+            'stats': stats,
+            'message': 'Data processed successfully using frontend CSV parsing + backend visualization'
+        })
+        
+    except Exception as e:
+        print(f"❌ 数据处理失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Processing failed: {str(e)}'}), 500
+
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
+    """保留原有的文件上传功能作为备用"""
     try:
         if 'file' not in request.files:
             return jsonify({'error': 'No file uploaded'}), 400
@@ -988,7 +1149,7 @@ def upload_file():
         if file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
         
-        print("📂 接收到文件上传请求")
+        print("📂 接收到文件上传请求（备用方式）")
         
         # 保存临时文件
         with tempfile.NamedTemporaryFile(mode='w+b', suffix='.csv', delete=False) as tmp_file:
@@ -1003,7 +1164,7 @@ def upload_file():
             except Exception as e:
                 return jsonify({'error': f'Failed to read CSV file: {str(e)}'}), 400
             
-            # 处理数据（使用Colab优化版本）
+            # 处理数据
             try:
                 processed_data = visualizer.process_data(df, sample_size=500)
             except Exception as e:
