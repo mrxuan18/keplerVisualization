@@ -567,11 +567,21 @@ def process_data():
         
         # 统计信息 - 确保所有值都是可序列化的
         try:
+            # 安全地转换日期范围
+            min_date = processed_data['shipment_date'].min()
+            max_date = processed_data['shipment_date'].max()
+            
+            # 确保日期是字符串类型
+            if pd.isna(min_date) or pd.isna(max_date):
+                date_range = "Unknown date range"
+            else:
+                date_range = f"{str(min_date)} → {str(max_date)}"
+            
             stats = {
                 'total_records': int(len(processed_data)),
                 'unique_warehouses': int(processed_data['warehouse'].nunique()),
                 'unique_destinations': int(processed_data['dest_city'].nunique()),
-                'date_range': f"{str(processed_data['shipment_date'].min())} → {str(processed_data['shipment_date'].max())}"
+                'date_range': date_range
             }
             
             print(f"📊 统计信息: {stats}")
@@ -579,17 +589,34 @@ def process_data():
         except Exception as e:
             print(f"❌ 统计信息生成失败: {e}")
             stats = {
-                'total_records': len(processed_data),
+                'total_records': int(len(processed_data)) if processed_data is not None else 0,
                 'unique_warehouses': 0,
                 'unique_destinations': 0,
                 'date_range': 'Unknown'
             }
         
-        return jsonify({
-            'html': map_html,
-            'stats': stats,
-            'message': 'Data processed successfully using frontend CSV parsing + backend visualization'
-        })
+        # 最终返回JSON - 确保所有内容都可序列化
+        try:
+            response_data = {
+                'html': str(map_html),  # 确保HTML是字符串
+                'stats': stats,
+                'message': 'Data processed successfully using frontend CSV parsing + backend visualization'
+            }
+            
+            print(f"✅ 准备返回响应，数据大小: {len(str(map_html))} 字符")
+            return jsonify(response_data)
+            
+        except Exception as e:
+            print(f"❌ JSON序列化失败: {e}")
+            return jsonify({
+                'error': f'Response serialization failed: {str(e)}',
+                'stats': {
+                    'total_records': int(len(processed_data)) if processed_data is not None else 0,
+                    'unique_warehouses': 0,
+                    'unique_destinations': 0,
+                    'date_range': 'Unknown'
+                }
+            }), 500
         
     except Exception as e:
         print(f"❌ 数据处理失败: {e}")
