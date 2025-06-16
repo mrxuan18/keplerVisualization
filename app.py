@@ -537,7 +537,7 @@ def process_data():
         
         # 处理数据
         try:
-            processed_data = visualizer.process_data(df, sample_size=200)
+            processed_data = visualizer.process_data(df, sample_size=100)
         except Exception as e:
             print(f"❌ 数据处理失败: {e}")
             import traceback
