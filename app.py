@@ -21,78 +21,110 @@ class WarehouseFixedVisualizer:
         self.all_data = None
         self.warehouse_mapping = None
 
-    def get_warehouse_mapping(self):
-        """获取warehouse邮编映射"""
-        return {
-            # NJ系列 - 新泽西州
-            'NJ9': '07114',          # Newark, NJ
-            'NJ8': '07201',          # Elizabeth, NJ
-            'NJ7': '08817',          # Edison, NJ
+    def analyze_warehouse_ids(self, df_sample):
+        """分析文件中的warehouse ID并推测地理位置"""
+        print("🔍 分析warehouse ID并推测地理位置...")
+        
+        warehouse_counts = df_sample['warehouse_name'].value_counts()
+        print(f"📊 前{len(df_sample)}行中发现的warehouse:")
+        for warehouse, count in warehouse_counts.items():
+            print(f"   {warehouse}: {count} 次")
+
+        # 根据warehouse ID推测地理位置和邮编
+        warehouse_zipcode_mapping = {
+            # NJ系列 - 新泽西州 (Newark, Elizabeth等物流中心)
+            'NJ9': '07114',          # Newark, NJ - 主要物流中心
+            'NJ8': '07201',          # Elizabeth, NJ - 港口物流中心
+            'NJ7': '08817',          # Edison, NJ - 仓储区
             'NJ-Main': '07306',      # Jersey City, NJ
-            
-            # TX系列 - 德克萨斯州
-            'TX8828': '75261',       # Dallas, TX
+
+            # TX系列 - 德克萨斯州 (达拉斯-沃斯堡地区)
+            'TX8828': '75261',       # Dallas, TX - 主要物流枢纽
             'TX8829': '76155',       # Fort Worth, TX
-            'TX-DFW': '75063',       # Irving, TX
-            'TX-Houston': '77032',   # Houston, TX
-            
-            # WNT系列 - West Coast
-            'WNT485': '90248',       # Gardena, CA
-            'WNT486': '91761',       # Ontario, CA
+            'TX-DFW': '75063',       # Irving, TX - DFW机场附近
+            'TX-Houston': '77032',   # Houston, TX - 船运中心
+
+            # WNT系列 - 推测为West Coast + NT (Northwest Terminal)
+            'WNT485': '90248',       # Gardena, CA - 洛杉矶地区物流中心
+            'WNT486': '91761',       # Ontario, CA - 内陆帝国物流区
             'WNT487': '92408',       # San Bernardino, CA
-            
-            # CA系列
-            'CA-LA': '90058',        # Los Angeles, CA
+
+            # CA系列 - 加利福尼亚州
+            'CA-LA': '90058',        # Los Angeles, CA - 工业区
             'CA-SF': '94080',        # South San Francisco, CA
-            'CA-OAK': '94621',       # Oakland, CA
-            
-            # IL系列
-            'IL-CHI': '60638',       # Chicago, IL
-            'IL9': '60106',          # Bensenville, IL
-            
-            # GA系列
-            'GA-ATL': '30349',       # Atlanta, GA
-            
-            # FL系列
-            'FL-MIA': '33166',       # Miami, FL
-            
-            # 默认
-            'Unknown': '07114',
-            'MAIN': '10001',
-            'NYC-Main': '11378',
+            'CA-OAK': '94621',       # Oakland, CA - 港口区
+
+            # IL系列 - 伊利诺伊州 (芝加哥地区)
+            'IL-CHI': '60638',       # Chicago, IL - 物流区
+            'IL9': '60106',          # Bensenville, IL - O'Hare附近
+
+            # GA系列 - 佐治亚州 (亚特兰大)
+            'GA-ATL': '30349',       # Atlanta, GA - 机场物流区
+
+            # FL系列 - 佛罗里达州 (迈阿密)
+            'FL-MIA': '33166',       # Miami, FL - 物流中心
+
+            # 通用/未知仓库 - 默认为主要物流中心
+            'Unknown': '07114',      # 默认新泽西Newark
+            'MAIN': '10001',         # 纽约主仓
+            'NYC-Main': '11378',     # Queens, NY - 物流区
         }
 
+        print(f"\n📍 Warehouse邮编映射表:")
+        for warehouse, zipcode in warehouse_zipcode_mapping.items():
+            print(f"   {warehouse} → {zipcode}")
+
+        return warehouse_zipcode_mapping
+
     def get_warehouse_zipcode(self, warehouse_name):
-        """根据warehouse名称获取邮编"""
+        """根据warehouse名称获取对应邮编"""
         if pd.isna(warehouse_name):
             return self.warehouse_mapping['Unknown']
-        
+
         warehouse_name = str(warehouse_name).strip()
-        
+
         # 直接匹配
         if warehouse_name in self.warehouse_mapping:
             return self.warehouse_mapping[warehouse_name]
-        
+
         # 模糊匹配
         warehouse_upper = warehouse_name.upper()
-        
+
+        # NJ系列匹配
         if warehouse_upper.startswith('NJ'):
-            return self.warehouse_mapping['NJ9']
+            return self.warehouse_mapping.get('NJ9', '07114')
+
+        # TX系列匹配
         elif warehouse_upper.startswith('TX'):
-            return self.warehouse_mapping['TX8828']
+            return self.warehouse_mapping.get('TX8828', '75261')
+
+        # WNT系列匹配
         elif warehouse_upper.startswith('WNT'):
-            return self.warehouse_mapping['WNT485']
+            return self.warehouse_mapping.get('WNT485', '90248')
+
+        # CA系列匹配
         elif warehouse_upper.startswith('CA'):
-            return self.warehouse_mapping['CA-LA']
+            return self.warehouse_mapping.get('CA-LA', '90058')
+
+        # IL系列匹配
         elif warehouse_upper.startswith('IL'):
-            return self.warehouse_mapping['IL-CHI']
+            return self.warehouse_mapping.get('IL-CHI', '60638')
+
+        # 包含关键词匹配
         elif 'NYC' in warehouse_upper or 'NEW YORK' in warehouse_upper:
-            return self.warehouse_mapping['NYC-Main']
+            return self.warehouse_mapping.get('NYC-Main', '11378')
         elif 'DALLAS' in warehouse_upper or 'DFW' in warehouse_upper:
-            return self.warehouse_mapping['TX-DFW']
+            return self.warehouse_mapping.get('TX-DFW', '75063')
         elif 'LA' in warehouse_upper or 'LOS ANGELES' in warehouse_upper:
-            return self.warehouse_mapping['CA-LA']
-        
+            return self.warehouse_mapping.get('CA-LA', '90058')
+        elif 'CHICAGO' in warehouse_upper:
+            return self.warehouse_mapping.get('IL-CHI', '60638')
+        elif 'ATLANTA' in warehouse_upper:
+            return self.warehouse_mapping.get('GA-ATL', '30349')
+        elif 'MIAMI' in warehouse_upper:
+            return self.warehouse_mapping.get('FL-MIA', '33166')
+
+        # 默认返回
         return self.warehouse_mapping['Unknown']
 
     def extract_zipcode(self, zipcode_str):
@@ -117,8 +149,10 @@ class WarehouseFixedVisualizer:
                 if 'places' in data and len(data['places']) > 0:
                     place = data['places'][0]
                     lat, lng = float(place['latitude']), float(place['longitude'])
+                    city = place['place name']
+                    state = place['state abbreviation']
                     self.coordinate_cache[zipcode] = (lat, lng)
-                    print(f"   ✓ {zipcode}: {place['place name']}, {place['state abbreviation']}")
+                    print(f"   ✓ {zipcode}: {city}, {state}")
                     return (lat, lng)
 
             self.coordinate_cache[zipcode] = (None, None)
@@ -130,7 +164,7 @@ class WarehouseFixedVisualizer:
             return (None, None)
 
     def process_timestamp(self, timestamp_str):
-        """处理时间戳"""
+        """处理时间戳为标准格式"""
         if pd.isna(timestamp_str):
             return None, None
 
@@ -148,17 +182,18 @@ class WarehouseFixedVisualizer:
         return None, None
 
     def process_data(self, df, sample_size=500):
-        """处理数据 - 基于Colab版本优化"""
-        print(f"🔄 开始处理数据，样本大小: {sample_size}")
-        
-        # 初始化映射
-        self.warehouse_mapping = self.get_warehouse_mapping()
-        
-        # 限制数据量
-        df = df.head(sample_size)
-        print(f"📂 原始数据: {len(df)} 行")
+        """处理所有数据，修复warehouse邮编 - 完整Colab版本逻辑"""
+        print(f"🔄 开始处理数据并修复warehouse邮编 (样本大小: {sample_size})...")
 
-        # 修复warehouse邮编
+        # 1. 分析并创建warehouse映射
+        df_sample = df.head(200)  # 先取200行分析warehouse
+        self.warehouse_mapping = self.analyze_warehouse_ids(df_sample)
+
+        # 2. 读取数据
+        df = df.head(sample_size)
+        print(f"\n📂 原始数据: {len(df)} 行")
+
+        # 3. 修复warehouse邮编
         print("🔧 修复warehouse邮编...")
         df['fixed_warehouse_zipcode'] = df['warehouse_name'].apply(self.get_warehouse_zipcode)
 
@@ -168,17 +203,17 @@ class WarehouseFixedVisualizer:
         for _, row in warehouse_fix_stats.iterrows():
             print(f"   {row['warehouse_name']} → {row['fixed_warehouse_zipcode']} ({row['count']} 条记录)")
 
-        # 处理时间戳
-        print("⏰ 处理时间戳...")
+        # 4. 处理时间戳
+        print("\n⏰ 处理时间戳...")
         timestamp_results = df['created_time'].apply(self.process_timestamp)
         df['shipment_date'] = [r[0] for r in timestamp_results]
         df['shipment_datetime'] = [r[1] for r in timestamp_results]
 
-        # 清洗目的地邮编
+        # 5. 清洗目的地邮编
         print("📮 清洗目的地邮编...")
         df['destination_zipcode'] = df['shipto_postal_code'].apply(self.extract_zipcode)
 
-        # 过滤有效数据
+        # 6. 过滤有效数据
         valid_df = df[
             (df['shipment_date'].notna()) &
             (df['fixed_warehouse_zipcode'].notna()) &
@@ -197,14 +232,15 @@ class WarehouseFixedVisualizer:
         for date, count in date_counts.items():
             print(f"   {date}: {count} 笔")
 
-        # 获取所有唯一邮编
+        # 7. 获取所有邮编的坐标
+        print(f"\n🌍 获取邮编坐标...")
         all_zipcodes = list(set(
             valid_df['fixed_warehouse_zipcode'].tolist() +
             valid_df['destination_zipcode'].tolist()
         ))
 
-        print(f"🌍 获取 {len(all_zipcodes)} 个邮编的坐标...")
-        
+        print(f"需要处理 {len(all_zipcodes)} 个唯一邮编")
+
         successful_coords = 0
         for i, zipcode in enumerate(all_zipcodes):
             coord = self.get_coordinates(zipcode)
@@ -213,27 +249,28 @@ class WarehouseFixedVisualizer:
 
             if (i + 1) % 10 == 0:
                 print(f"   进度: {i + 1}/{len(all_zipcodes)} | 成功: {successful_coords}")
-            time.sleep(0.1)  # 避免API限制
+            time.sleep(0.1)
 
         success_rate = successful_coords / len(all_zipcodes) * 100
         print(f"✅ 坐标获取成功率: {successful_coords}/{len(all_zipcodes)} ({success_rate:.1f}%)")
 
-        # 添加坐标
+        # 8. 添加坐标
         print("📍 添加坐标信息...")
-        valid_df['warehouse_lat'] = valid_df['fixed_warehouse_zipcode'].apply(
-            lambda z: self.coordinate_cache.get(z, (None, None))[0]
-        )
-        valid_df['warehouse_lng'] = valid_df['fixed_warehouse_zipcode'].apply(
-            lambda z: self.coordinate_cache.get(z, (None, None))[1]
-        )
-        valid_df['destination_lat'] = valid_df['destination_zipcode'].apply(
-            lambda z: self.coordinate_cache.get(z, (None, None))[0]
-        )
-        valid_df['destination_lng'] = valid_df['destination_zipcode'].apply(
-            lambda z: self.coordinate_cache.get(z, (None, None))[1]
-        )
 
-        # 最终过滤
+        def get_lat(zipcode):
+            coord = self.coordinate_cache.get(zipcode, (None, None))
+            return coord[0] if coord and len(coord) == 2 else None
+
+        def get_lng(zipcode):
+            coord = self.coordinate_cache.get(zipcode, (None, None))
+            return coord[1] if coord and len(coord) == 2 else None
+
+        valid_df['warehouse_lat'] = valid_df['fixed_warehouse_zipcode'].apply(get_lat)
+        valid_df['warehouse_lng'] = valid_df['fixed_warehouse_zipcode'].apply(get_lng)
+        valid_df['destination_lat'] = valid_df['destination_zipcode'].apply(get_lat)
+        valid_df['destination_lng'] = valid_df['destination_zipcode'].apply(get_lng)
+
+        # 9. 最终过滤（必须有坐标）
         final_df = valid_df[
             (valid_df['warehouse_lat'].notna()) &
             (valid_df['destination_lat'].notna())
@@ -246,7 +283,7 @@ class WarehouseFixedVisualizer:
             return None
 
         # 显示最终统计
-        print(f"📊 最终统计:")
+        print(f"\n📊 最终统计:")
         final_warehouse_stats = final_df.groupby(['warehouse_name', 'fixed_warehouse_zipcode']).size().reset_index(name='count')
         print("仓库分布:")
         for _, row in final_warehouse_stats.iterrows():
@@ -254,20 +291,34 @@ class WarehouseFixedVisualizer:
             if warehouse_coord != (None, None):
                 print(f"   {row['warehouse_name']} ({row['fixed_warehouse_zipcode']}): {row['count']} 笔 → 坐标: {warehouse_coord}")
 
-        # 创建Kepler数据集
-        print(f"📋 创建Kepler.gl数据集...")
+        final_date_counts = final_df['shipment_date'].value_counts().sort_index()
+        print("日期分布:")
+        for date, count in final_date_counts.items():
+            print(f"   {date}: {count} 笔")
+
+        # 10. 创建Kepler数据集
+        print(f"\n📋 创建Kepler.gl数据集...")
+
         kepler_data = pd.DataFrame({
+            # 基本信息
             'shipment_id': final_df['id'],
             'shipment_date': final_df['shipment_date'],
+            'shipment_datetime': final_df['shipment_datetime'],
             'warehouse': final_df['warehouse_name'].fillna('Unknown'),
             'warehouse_zipcode': final_df['fixed_warehouse_zipcode'],
+
+            # 坐标信息
             'origin_lat': final_df['warehouse_lat'],
             'origin_lng': final_df['warehouse_lng'],
             'dest_lat': final_df['destination_lat'],
             'dest_lng': final_df['destination_lng'],
+
+            # 地址信息
             'dest_zipcode': final_df['destination_zipcode'],
             'dest_city': final_df['shipto_city'].fillna('Unknown'),
             'dest_country': final_df['shipto_country_code'].fillna('US'),
+
+            # 业务信息
             'carrier': final_df['carrier'].fillna('Unknown'),
             'business_type': final_df.get('biz_type', pd.Series(['Standard'] * len(final_df))).fillna('Standard'),
             'weight_kg': final_df.get('gw', pd.Series([1] * len(final_df))).fillna(1),
@@ -275,23 +326,27 @@ class WarehouseFixedVisualizer:
             'packages': final_df.get('pkg_num', pd.Series([1] * len(final_df))).fillna(1)
         })
 
-        # 计算距离
+        # 添加计算字段
         kepler_data['distance_km'] = np.sqrt(
             (kepler_data['dest_lat'] - kepler_data['origin_lat'])**2 +
             (kepler_data['dest_lng'] - kepler_data['origin_lng'])**2
         ) * 111
 
         self.all_data = kepler_data
-        
+
         print(f"✅ Kepler数据集创建完成: {len(kepler_data)} 行")
         print(f"📅 包含日期: {kepler_data['shipment_date'].nunique()} 天")
+        print(f"🏢 包含仓库: {kepler_data['warehouse'].nunique()} 个")
+        print(f"📍 包含目的地: {kepler_data['dest_city'].nunique()} 个")
+
+        return kepler_data日期: {kepler_data['shipment_date'].nunique()} 天")
         print(f"🏢 包含仓库: {kepler_data['warehouse'].nunique()} 个")
         print(f"📍 包含目的地: {kepler_data['dest_city'].nunique()} 个")
 
         return kepler_data
 
     def create_kepler_config_with_filters(self):
-        """创建包含过滤器的Kepler配置 - 基于Colab版本"""
+        """创建包含过滤器的Kepler配置 - 完整Colab版本"""
         return {
             'version': 'v1',
             'config': {
@@ -389,17 +444,32 @@ class WarehouseFixedVisualizer:
         }
 
     def create_kepler_map(self):
-        """创建Kepler.gl地图"""
+        """创建包含所有数据的Kepler.gl地图 - 完整Colab版本"""
         if self.all_data is None:
             return None
 
         print(f"🗺️ 创建包含所有数据的Kepler.gl地图...")
         print(f"📊 数据总量: {len(self.all_data)} 条运输记录")
 
+        # 显示warehouse分布
+        warehouse_stats = self.all_data.groupby(['warehouse', 'warehouse_zipcode']).size().reset_index(name='count')
+        print(f"\n🏢 仓库分布:")
+        for _, row in warehouse_stats.iterrows():
+            print(f"   {row['warehouse']} ({row['warehouse_zipcode']}): {row['count']} 笔")
+
+        # 创建地图
         config = self.create_kepler_config_with_filters()
         map_instance = KeplerGl(height=700, width=1200, config=config)
         map_instance.add_data(data=self.all_data, name='shipments')
-        
+
+        print(f"\n✅ 地图创建完成!")
+        print(f"🎛️ 使用方法:")
+        print(f"   1. 地图显示所有仓库到目的地的运输路线")
+        print(f"   2. 绿色圆点 = 仓库位置（基于修复的邮编）")
+        print(f"   3. 蓝色圆点 = 目的地位置")
+        print(f"   4. 红色弧线 = 运输路线")
+        print(f"   5. 点击 'Filters' 添加日期、仓库、承运商等过滤器")
+
         return map_instance
 
 # 全局可视化器实例
@@ -469,7 +539,7 @@ def process_data():
         
         # 处理数据
         try:
-            processed_data = visualizer.process_data(df, sample_size=500)
+            processed_data = visualizer.process_data(df, sample_size=200)
         except Exception as e:
             print(f"❌ 数据处理失败: {e}")
             import traceback
@@ -557,7 +627,7 @@ def upload_file():
             
             # 处理数据
             try:
-                processed_data = visualizer.process_data(df, sample_size=500)
+                processed_data = visualizer.process_data(df, sample_size=200)
             except Exception as e:
                 print(f"❌ 数据处理失败: {e}")
                 import traceback
@@ -701,18 +771,27 @@ def health_check():
 
 if __name__ == '__main__':
     print("🚀 启动 Express Parcel Visualization 服务器")
-    print("🏗️ 混合架构：前端CSV解析 + 后端Python处理")
-    print("📍 Warehouse位置自动修复功能已启用")
+    print("🏗️ 完整Colab逻辑集成：前端CSV解析 + 后端warehouse修复")
+    print("📍 Warehouse位置自动修复功能已启用（完整版）")
     print("🗺️ 使用Python KeplerGL后端渲染")
-    print("=" * 60)
-    print("🔧 特性:")
+    print("=" * 70)
+    print("🔧 特性（基于成熟Colab版本）:")
     print("   • 前端CSV文件读取和解析（无上传限制）")
-    print("   • 自动修复warehouse邮编（基于ID模式）")
+    print("   • 智能warehouse ID分析和邮编推测")
+    print("   • 自动修复warehouse邮编（基于ID模式匹配）")
+    print("   • 详细的数据处理步骤和日志")
     print("   • 智能地理编码（API + 缓存）")
-    print("   • 交互式Kepler.gl可视化")
-    print("   • 数据清洗和验证")
-    print("   • 响应式Web界面")
-    print("   • 调试面板和进度跟踪")
-    print("=" * 60)
+    print("   • 完整的数据清洗和验证流水线")
+    print("   • 交互式Kepler.gl可视化（多图层）")
+    print("   • 时间序列过滤器和动画")
+    print("   • 响应式Web界面 + 调试面板")
+    print("=" * 70)
+    print("📋 支持的Warehouse系列:")
+    print("   • NJ系列: NJ9, NJ8, NJ7, NJ-Main (新泽西物流中心)")
+    print("   • TX系列: TX8828, TX8829, TX-DFW, TX-Houston (德州枢纽)")
+    print("   • WNT系列: WNT485, WNT486, WNT487 (西海岸终端)")
+    print("   • CA系列: CA-LA, CA-SF, CA-OAK (加州港口)")
+    print("   • IL, GA, FL系列: 芝加哥、亚特兰大、迈阿密")
+    print("=" * 70)
     
     app.run(debug=True, host='0.0.0.0', port=5000)
